@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>CurbCut — map the barriers, fix the city</title>
+<meta name="description" content="Photograph accessibility barriers, let AI verify them and draft the council report, and build a live map of accessible places.">
+<meta name="theme-color" content="#1A1712">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/logo.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+
+<header class="topbar">
+  <a class="brand" href="/">
+    <svg class="brand-mark" viewBox="0 0 40 40" aria-hidden="true" focusable="false">
+      <rect width="40" height="40" rx="9" fill="#F2B800"/>
+      <rect x="6" y="28" width="28" height="5" rx="2.5" fill="#1A1712"/>
+      <rect x="8" y="19" width="27" height="5" rx="2.5" fill="#1A1712" transform="rotate(-30 21.5 21.5)"/>
+      <circle cx="13" cy="12" r="4.2" fill="#1A1712"/>
+    </svg>
+    <span class="brand-word">Curb<em>Cut</em></span>
+  </a>
+  <p class="tagline">See the barriers. Fix the city.</p>
+  <a class="toplink" href="/council.html">Council view</a>
+</header>
+<div class="tactile" aria-hidden="true"></div>
+
+<div class="chipbar" role="toolbar" aria-label="Filter the map">
+  <button class="chip is-on" data-filter="all" aria-pressed="true">All</button>
+  <button class="chip" data-filter="issues" aria-pressed="false"><span class="dot dot-critical" aria-hidden="true"></span>Barriers</button>
+  <button class="chip" data-filter="features" aria-pressed="false"><span class="dot dot-good" aria-hidden="true"></span>Accessible</button>
+  <button class="chip" data-filter="pending" aria-pressed="false"><span class="dot dot-pending" aria-hidden="true"></span>Pending</button>
+  <button class="chip" data-filter="fixed" aria-pressed="false"><span class="dot dot-fixed" aria-hidden="true"></span>Fixed</button>
+  <span class="chip-count" id="chipCount" aria-live="polite"></span>
+</div>
+
+<main class="stage">
+  <div id="map" aria-label="Accessibility map"></div>
+
+  <div class="dock">
+    <section class="leader card" id="leader" hidden aria-label="Top reporters">
+      <h2>Street champions</h2>
+      <ol id="leaderList"></ol>
+    </section>
+    <section class="legend card" aria-label="Map legend">
+      <h2>Legend</h2>
+      <ul>
+        <li><span class="dot dot-critical" aria-hidden="true"></span>Severe barrier (4–5)</li>
+        <li><span class="dot dot-serious" aria-hidden="true"></span>Serious barrier (3)</li>
+        <li><span class="dot dot-warn" aria-hidden="true"></span>Minor barrier (1–2)</li>
+        <li><span class="dot dot-pending dot-dash" aria-hidden="true"></span>Awaiting verification</li>
+        <li><span class="dot dot-fixed" aria-hidden="true"></span>Fixed</li>
+        <li><span class="dot dot-good" aria-hidden="true"></span>Accessible feature</li>
+      </ul>
+    </section>
+  </div>
+
+  <button class="fab" id="fab" type="button">
+    <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false">
+      <path fill="currentColor" d="M9.4 4.5 8.3 6H5a2.5 2.5 0 0 0-2.5 2.5v8A2.5 2.5 0 0 0 5 19h14a2.5 2.5 0 0 0 2.5-2.5v-8A2.5 2.5 0 0 0 19 6h-3.3l-1.1-1.5a2 2 0 0 0-1.6-.8h-2a2 2 0 0 0-1.6.8ZM12 16.2a3.7 3.7 0 1 1 0-7.4 3.7 3.7 0 0 1 0 7.4Z"/>
+    </svg>
+    Report
+  </button>
+
+  <aside class="panel card" id="panel" hidden aria-label="Report details"></aside>
+</main>
+
+<div class="toasts" id="toasts" aria-live="polite"></div>
+<input type="file" id="cameraInput" accept="image/*" capture="environment" hidden>
+
+<script src="/vendor/leaflet/leaflet.js"></script>
+<script type="module" src="/app.js"></script>
+</body>
+</html>
