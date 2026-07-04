@@ -7,6 +7,10 @@ import 'theme.dart';
 /// clusters live in features/map/marker_icons.dart (Google Maps markers are
 /// native bitmaps, not widgets).
 
+/// App-wide messenger so background work (e.g. the verification watcher)
+/// can announce results regardless of which screen is showing.
+final kerbMessengerKey = GlobalKey<ScaffoldMessengerState>();
+
 class TierBadge extends StatelessWidget {
   const TierBadge({super.key, required this.tier, this.compact = false});
 

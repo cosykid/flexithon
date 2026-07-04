@@ -162,6 +162,9 @@ class _ReportCard extends ConsumerWidget {
                 if (snap.data == null) return const SizedBox.shrink();
                 return CachedNetworkImage(
                   imageUrl: snap.data!,
+                  // Signed URLs differ on every fetch; key the cache by the
+                  // stable storage path or nothing ever hits the disk cache.
+                  cacheKey: report.photoPath,
                   height: 190,
                   width: double.infinity,
                   fit: BoxFit.cover,
