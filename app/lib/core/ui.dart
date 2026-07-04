@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:flutter_map_cancellable_tile_provider/flutter_map_cancellable_tile_provider.dart';
 
 import '../models/report.dart';
 import 'env.dart';
@@ -26,6 +27,9 @@ class KerbTileLayer extends StatelessWidget {
           ? 'https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png'
           : 'https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}.png?api_key=${Env.stadiaApiKey}',
       userAgentPackageName: 'com.hackathon.accessmap',
+      // Aborts in-flight tile fetches when panned/zoomed past — less mobile
+      // data, faster map settle.
+      tileProvider: CancellableNetworkTileProvider(),
     );
   }
 }
@@ -114,26 +118,6 @@ class _NotchPainter extends CustomPainter {
   bool shouldRepaint(_NotchPainter old) => old.color != color;
 }
 
-/// Fades its child in on mount. Used by pins and clusters so zoom-level
-/// changes read as a crossfade instead of the plugin's translate animation.
-class KerbFadeIn extends StatelessWidget {
-  const KerbFadeIn({super.key, required this.child});
-
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 0, end: 1),
-      duration: const Duration(milliseconds: 220),
-      curve: Curves.easeOut,
-      child: child,
-      builder: (context, value, child) =>
-          Opacity(opacity: value, child: child),
-    );
-  }
-}
-
 /// Cluster circle: count in the middle, filled with the weighted blend of
 /// its members' tier colours — mostly partial reports read amber, mostly
 /// substantiated reads red, mixes land in between.
@@ -160,21 +144,19 @@ class KerbCluster extends StatelessWidget {
             ? 52.0
             : 46.0;
 
-    return KerbFadeIn(
-      child: Container(
-        width: size,
-        height: size,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: fill,
-          shape: BoxShape.circle,
-          border: Border.all(color: Colors.white, width: 3),
-          boxShadow: KerbShadows.subtle,
-        ),
-        child: Text(
-          '${markers.length}',
-          style: kerbDisplay(size: size * 0.32, color: Colors.white),
-        ),
+    return Container(
+      width: size,
+      height: size,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: fill,
+        shape: BoxShape.circle,
+        border: Border.all(color: Colors.white, width: 3),
+        boxShadow: KerbShadows.subtle,
+      ),
+      child: Text(
+        '${markers.length}',
+        style: kerbDisplay(size: size * 0.32, color: Colors.white),
       ),
     );
   }
