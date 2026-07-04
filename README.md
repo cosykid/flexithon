@@ -109,7 +109,7 @@ It then drives an **OpenAI-compatible `/chat/completions`** loop (configurable e
 |---|---|---|
 | `web_search` | Tavily | Search for the venue's accessibility online; returns title/URL/snippet results |
 | `get_place_accessibility` | Google Places (New) | Read the venue's own `accessibilityOptions.wheelchairAccessibleEntrance` claim |
-| `submit_verdict` | (terminal) | Report facts: does the image confirm the barrier, barrier type, venue claim, corroboration, contradiction, confidence, reasoning |
+| `submit_verdict` | (terminal) | Report facts: does the image confirm the barrier, barrier type, venue claim, corroboration, contradiction, confidence, reasoning, and a source link per verified claim |
 
 Guardrails: a **60-second deadline** and **5-iteration cap**; a **vision-less fallback** that retries once without the image on HTTP 400 (so text-only endpoints degrade to *unsubstantiated* rather than hanging); and on any thrown error the report is left `pending` with `retry_count` incremented, so the sweep can retry up to 3 times.
 
@@ -125,6 +125,8 @@ The Google Places claim is treated as **ground truth** — whatever `wheelchairA
 4. Photo confirms **and** the venue is silent or admits inaccessibility → `classified` / **substantiated**.
 
 `web_corroboration_found` (stored in its own boolean column) and `confidence` (stored inside the `ai_reasoning` JSON) are recorded but do **not** affect the tier. The full reasoning trail — model name, reasoning text, confidence, and the log of tool calls — is stored in `ai_reasoning` on the report for display in the detail sheet.
+
+Every verified claim carries a citation back to where the information was found, so users can independently check the source. The model must cite `{url, title, claim}` entries in `submit_verdict`; the server only keeps URLs that actually appeared in a tool result during that run (web-search results or the venue's Google Maps link), so a hallucinated link can never reach the database. Because the Places claim is ground truth, its Google Maps link is attached automatically whenever the tool fired — even if the model forgot to cite it. Sanitized citations are stored as rows in the **`report_sources`** table; the app lists their titles alongside the AI summary but fetches the destination URL from Supabase only when the user taps a link.
 
 ### 4. Rollup & auto-promotion (Postgres trigger)
 
@@ -174,6 +176,19 @@ Two tables: individual **`reports`** roll up into **`locations`** (the map pins)
 | `ai_reasoning` | jsonb | `{model, reasoning, confidence, tool_calls}` |
 | `retry_count` | int | incremented by the sweep on failure |
 | `created_at` | timestamptz | |
+
+**`report_sources`** — one row per source link the AI verifier cited (migration `005_sources.sql`).
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | uuid PK | |
+| `report_id` | uuid → `reports` | cascade delete |
+| `url` | text NOT NULL | fetched by the app at click time, never in list queries |
+| `title`, `claim` | text | display label and which verified claim the link supports |
+| `position` | int | citation order from the verdict |
+| `created_at` | timestamptz | |
+
+RLS mirrors the parent report's visibility (own reports, or classified partial/substantiated); only the service role writes rows.
 
 **Enums**: `report_tier` = `unsubstantiated | partially_substantiated | substantiated` (the `unsubstantiated` value exists but the pipeline leaves `effective_tier` null instead); `report_status` = `pending | classified | rejected`.
 
@@ -229,7 +244,8 @@ flexithon/
    │  ├─ 001_schema.sql         PostGIS, enums, locations + reports, indexes
    │  ├─ 002_rls.sql            RLS + storage.objects policies
    │  ├─ 003_rpc.sql            points_in_bbox, upsert_location
-   │  └─ 004_trigger.sql        refresh_location_rollup + reports_rollup trigger
+   │  ├─ 004_trigger.sql        refresh_location_rollup + reports_rollup trigger
+   │  └─ 005_sources.sql        report_sources (per-claim citation links) + RLS
    ├─ functions/classify-report/   Deno AI verification pipeline
    │  ├─ index.ts               HTTP entry: dispatch, load, classify, write, retry
    │  ├─ aiClient.ts            OpenAI-compatible vision + tool-use loop
@@ -250,7 +266,7 @@ The app is mobile-first and portrait-first, built around a two-tab shell (**Map*
 
 - **Map** — `flutter_map` with a Stadia/CARTO basemap, viewport-debounced fetching, tier-coloured clustered pins, a my-location button, a *Report barrier* FAB, and tier filter chips for the two visible tiers. Tapping a pin opens the report-detail sheet.
 - **New report** — the four-step flow (photo, location mini-map you can tap to fine-tune, optional venue search, description) with a sticky submit bar. On success it invalidates the map and My Reports providers so both refresh.
-- **Report detail** — a draggable bottom sheet showing a location's **classified** reports: tier badge, report count, per-report photo (via 1-hour signed URLs), a barrier-type tag, date, description, and an expandable AI-verification summary. Partially-substantiated locations get a "venue claims accessible online, but photos say otherwise" callout.
+- **Report detail** — a draggable bottom sheet showing a location's **classified** reports: tier badge, report count, per-report photo (via 1-hour signed URLs), a barrier-type tag, date, description, and an expandable AI-verification summary with tappable **source links** — each verified claim cites the page or Google Maps listing where the information was found. Partially-substantiated locations get a "venue claims accessible online, but photos say otherwise" callout.
 - **My reports** — your own submissions (any status) with pull-to-refresh; status-driven cards — pending shows *Verifying…* with an hourglass, rejected shows a block icon, classified adopts the tier's colour/icon/label.
 
 ### Repository abstraction & the USE_FAKE parachute

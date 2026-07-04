@@ -2,7 +2,7 @@
 // Works against any /chat/completions endpoint that supports vision + tools.
 
 import { toolDefinitions, webSearch, getPlaceAccessibility } from "./tools.ts";
-import type { Verdict } from "./classify.ts";
+import { sanitizeSources, type Source, type Verdict } from "./classify.ts";
 
 const AI_BASE_URL = (Deno.env.get("AI_BASE_URL") ?? "https://api.openai.com/v1")
   .replace(/\/$/, "");
@@ -16,7 +16,10 @@ const SYSTEM_PROMPT = `You verify crowdsourced accessibility-barrier reports for
 Examine the photo if provided: does it clearly show the claimed barrier (stairs, missing ramp, narrow doorway, broken lift, etc.)?
 If a venue is tagged (place_id given), call get_place_accessibility to check the venue's own accessibility claim.
 Optionally call web_search (e.g. "<venue name> <address> wheelchair accessible") to corroborate the barrier claim.
-Then call submit_verdict exactly once. You report facts only; you do not decide the report's classification.`;
+Then call submit_verdict exactly once. You report facts only; you do not decide the report's classification.
+In submit_verdict, include a source link for every claim you verified using a tool, so users can
+independently check each source. Cite only URLs that appeared in tool results during this conversation
+(web_search result URLs, or the maps_url from get_place_accessibility) — never invent or guess a URL.`;
 
 interface RunInput {
   description: string;
@@ -68,8 +71,11 @@ async function runLoop(input: RunInput, signal: AbortSignal): Promise<RunResult>
   ];
 
   const toolCallLog: Array<{ tool: string; args: unknown }> = [];
+  // URLs actually returned by tools this run; the only URLs a verdict may cite.
+  const seenUrls = new Set<string>();
   // Ground truth from the Places tool; overrides the model's echo in the verdict.
   let placesClaim: boolean | null | undefined;
+  let placesSource: Source | null = null;
   let visionRetried = false;
 
   for (let i = 0; i < MAX_ITERATIONS; i++) {
@@ -122,17 +128,34 @@ async function runLoop(input: RunInput, signal: AbortSignal): Promise<RunResult>
       toolCallLog.push({ tool: name, args });
 
       if (name === "submit_verdict") {
-        const verdict = normalizeVerdict(args, input, visionRetried);
+        const verdict = normalizeVerdict(args, input, visionRetried, seenUrls);
         if (placesClaim !== undefined) verdict.venue_claims_accessible = placesClaim;
+        // The venue claim is ground truth from the Places tool, so its source
+        // link is always attached even if the model forgot to cite it.
+        if (placesSource && !verdict.sources.some((s) => s.url === placesSource!.url)) {
+          verdict.sources.unshift(placesSource);
+        }
         return { verdict, toolCallLog, model: AI_MODEL };
       }
 
       let result: string;
       if (name === "web_search") {
-        result = await webSearch(String(args.query ?? ""));
+        const out = await webSearch(String(args.query ?? ""));
+        out.urls.forEach((u) => seenUrls.add(u));
+        result = out.raw;
       } else if (name === "get_place_accessibility") {
         const out = await getPlaceAccessibility(String(args.place_id ?? ""));
         placesClaim = out.claim;
+        if (out.url) {
+          seenUrls.add(out.url);
+          placesSource = {
+            url: out.url,
+            title: input.venueName ? `${input.venueName} on Google Maps` : "Google Maps listing",
+            claim: out.claim === null
+              ? "Venue makes no wheelchair-accessibility claim on Google Maps"
+              : `Venue ${out.claim ? "claims" : "does not claim"} wheelchair accessibility on Google Maps`,
+          };
+        }
         result = out.raw;
       } else {
         result = JSON.stringify({ error: `unknown tool ${name}` });
@@ -166,6 +189,7 @@ function normalizeVerdict(
   args: Record<string, unknown>,
   input: RunInput,
   visionFailed: boolean,
+  seenUrls: ReadonlySet<string>,
 ): Verdict {
   const noImage = !input.imageDataUri || visionFailed;
   return {
@@ -184,5 +208,6 @@ function normalizeVerdict(
       ? args.confidence
       : "low") as Verdict["confidence"],
     reasoning: String(args.reasoning ?? ""),
+    sources: sanitizeSources(args.sources, seenUrls),
   };
 }
