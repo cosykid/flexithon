@@ -1,4 +1,4 @@
-import 'package:latlong2/latlong.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 /// A Google Places Text Search result used for tagging a report to a venue.
 class Venue {

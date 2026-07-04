@@ -19,11 +19,11 @@ rollup trigger in `supabase/migrations/004_trigger.sql`).
 
 ## Stack
 
-- **Flutter** — `flutter_map` + `flutter_map_marker_cluster` (animated zoom-based clustering), Riverpod, `supabase_flutter`
+- **Flutter** — `google_maps_flutter` (custom canvas-drawn pins + zoom-based clustering), Riverpod, `supabase_flutter`
 - **Supabase** — Postgres + PostGIS, anonymous auth, Storage (photos), Edge Function (Deno) for verification
 - **AI** — any OpenAI-compatible `/chat/completions` endpoint with vision + tool calling
 - **Tools the AI can call** — Tavily web search, Google Places (New) `accessibilityOptions.wheelchairAccessibleEntrance`
-- **Tiles** — Stadia Maps free tier (falls back to OSM for quick local dev; don't ship that)
+- **Maps** — Google Maps Platform: Maps SDK (Android/iOS/JS) with a Kerb-styled basemap, Places API for venue tagging
 
 ## Setup
 
@@ -80,12 +80,16 @@ curl -X POST "$SUPABASE_URL/functions/v1/classify-report" \
 cd app
 flutter create . --org com.hackathon --project-name accessmap   # generates android/ios
 flutter pub get
-flutter run \
+MAPS_API_KEY=<android-maps-key> flutter run \
   --dart-define=SUPABASE_URL=https://<ref>.supabase.co \
   --dart-define=SUPABASE_ANON_KEY=<anon-key> \
-  --dart-define=STADIA_API_KEY=<stadia-key> \
   --dart-define=GOOGLE_PLACES_KEY=<places-key>
 ```
+
+Google Maps SDK keys are platform-side (not dart-defines):
+- **Android** — `MAPS_API_KEY` env var / gradle property (wired in `android/app/build.gradle.kts`)
+- **iOS** — `GMSApiKey` entry in `ios/Runner/Info.plist`
+- **Web** — key in the maps `<script>` tag in `web/index.html`
 
 Platform permissions (after `flutter create`):
 - **Android** `android/app/src/main/AndroidManifest.xml`: `ACCESS_FINE_LOCATION`, `CAMERA`, `INTERNET`
@@ -102,9 +106,9 @@ flutter run --dart-define=USE_FAKE=true
 | Key | Where | Card? |
 |---|---|---|
 | Supabase URL + anon key | supabase.com project settings | No |
-| Stadia Maps | client.stadiamaps.com | No |
+| Google Maps SDK | GCP console, enable Maps SDK for Android / iOS and Maps JavaScript API — mobile map loads are unlimited free, JS gets $200/mo credit | **Yes** (billing enabled) |
 | Tavily | app.tavily.com (1,000 credits/mo) | No |
-| Google Places | GCP console, enable Places API (New) — 5k Pro calls/mo | **Yes** (billing must be enabled; mobile map loads not used, only Places REST) |
+| Google Places | GCP console, enable Places API (New) — 5k Pro calls/mo | **Yes** (billing must be enabled; can share the GCP project/key with the Maps SDK) |
 | OpenAI-compatible AI | your provider of choice | Depends |
 
 ## Demo script

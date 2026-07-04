@@ -1,18 +1,22 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
-import 'package:flutter_map_marker_cluster/flutter_map_marker_cluster.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:latlong2/latlong.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 
+import '../../core/platform.dart';
 import '../../core/theme.dart';
 import '../../core/ui.dart';
 import '../../models/map_point.dart';
 import '../new_report/new_report_flow.dart';
 import '../report_detail/report_detail_sheet.dart';
+import 'barriers_list_sheet.dart';
+import 'cluster.dart';
 import 'map_providers.dart';
+import 'map_style.dart';
+import 'marker_icons.dart';
 import 'tier_filter_chips.dart';
 
 class MapScreen extends ConsumerStatefulWidget {
@@ -23,25 +27,86 @@ class MapScreen extends ConsumerStatefulWidget {
 }
 
 class _MapScreenState extends ConsumerState<MapScreen> {
-  static const _sydney = LatLng(-33.8988, 151.2093);
+  static const _sydney = CameraPosition(
+    target: LatLng(-33.8988, 151.2093),
+    zoom: 12,
+  );
 
-  final _mapController = MapController();
+  GoogleMapController? _controller;
+  KerbMarkerIcons? _icons;
   Timer? _debounce;
+  double _zoom = _sydney.zoom;
+  Set<Marker> _markers = const {};
+  int _markerBuild = 0;
+  bool _myLocationEnabled = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _icons ??= KerbMarkerIcons(MediaQuery.devicePixelRatioOf(context));
+  }
 
   @override
   void dispose() {
     _debounce?.cancel();
-    _mapController.dispose();
+    _controller?.dispose();
     super.dispose();
   }
 
   void _scheduleViewportFetch() {
     _debounce?.cancel();
-    _debounce = Timer(const Duration(milliseconds: 300), () {
+    _debounce = Timer(const Duration(milliseconds: 300), () async {
+      final controller = _controller;
+      if (!mounted || controller == null) return;
+      final bounds = await controller.getVisibleRegion();
       if (!mounted) return;
-      ref.read(mapBboxProvider.notifier).state =
-          bboxOf(_mapController.camera.visibleBounds);
+      ref.read(mapBboxProvider.notifier).state = bboxOf(bounds);
     });
+  }
+
+  /// Re-cluster the current points and paint them as native markers.
+  /// Async because bitmaps render lazily; a generation counter drops stale
+  /// builds when the camera or data moves on.
+  Future<void> _rebuildMarkers() async {
+    final icons = _icons;
+    if (icons == null) return;
+    final points = ref.read(mapPointsProvider).valueOrNull ?? const <MapPoint>[];
+    final generation = ++_markerBuild;
+    final clusters = clusterMapPoints(points, _zoom);
+
+    final markers = <Marker>{};
+    for (final cluster in clusters) {
+      if (cluster.count == 1) {
+        final point = cluster.points.first;
+        markers.add(Marker(
+          markerId: MarkerId(point.locationId),
+          position: point.position,
+          icon: await icons.pin(point.tier),
+          anchor: const Offset(0.5, 1),
+          consumeTapEvents: true,
+          onTap: () => showReportDetailSheet(context, point),
+        ));
+      } else {
+        markers.add(Marker(
+          markerId: MarkerId(
+            'cluster-${cluster.position.latitude}-${cluster.position.longitude}',
+          ),
+          position: cluster.position,
+          icon: await icons.cluster(cluster.count, cluster.redFraction),
+          anchor: const Offset(0.5, 0.5),
+          consumeTapEvents: true,
+          onTap: () => _controller?.animateCamera(
+            CameraUpdate.newLatLngZoom(
+              cluster.position,
+              math.min(_zoom + 2.5, 19),
+            ),
+          ),
+        ));
+      }
+    }
+
+    if (!mounted || generation != _markerBuild) return;
+    setState(() => _markers = markers);
   }
 
   Future<void> _goToMyLocation() async {
@@ -55,51 +120,56 @@ class _MapScreenState extends ConsumerState<MapScreen> {
         return;
       }
       final pos = await Geolocator.getCurrentPosition();
-      _mapController.move(LatLng(pos.latitude, pos.longitude), 16);
+      if (!mounted) return;
+      // Blue dot only after consent, so the first frame never asks.
+      setState(() => _myLocationEnabled = true);
+      await _controller?.animateCamera(
+        CameraUpdate.newLatLngZoom(LatLng(pos.latitude, pos.longitude), 16),
+      );
     } catch (_) {
-      // No location plugin on this platform (desktop trial) — stay put.
+      // No location plugin on this platform (web/desktop trial) — stay put.
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final points = ref.watch(mapPointsProvider);
+    ref.listen(mapPointsProvider, (_, __) => _rebuildMarkers());
 
     return Scaffold(
       backgroundColor: KerbColors.paper,
       body: Stack(
         children: [
-          FlutterMap(
-            mapController: _mapController,
-            options: MapOptions(
-              initialCenter: _sydney,
-              initialZoom: 12,
-              onMapReady: _scheduleViewportFetch,
-              onMapEvent: (event) {
-                if (event is MapEventMoveEnd ||
-                    event is MapEventFlingAnimationEnd ||
-                    event is MapEventDoubleTapZoomEnd ||
-                    event is MapEventScrollWheelZoom) {
-                  _scheduleViewportFetch();
-                }
+          if (mapsSupported)
+            GoogleMap(
+              initialCameraPosition: _sydney,
+              style: kerbMapStyle,
+              markers: _markers,
+              myLocationEnabled: _myLocationEnabled,
+              myLocationButtonEnabled: false,
+              zoomControlsEnabled: false,
+              mapToolbarEnabled: false,
+              compassEnabled: false,
+              tiltGesturesEnabled: false,
+              // Keeps the Google logo clear of the floating nav bar.
+              padding: const EdgeInsets.only(bottom: 88),
+              onMapCreated: (controller) {
+                _controller = controller;
+                _scheduleViewportFetch();
               },
+              onCameraMove: (position) => _zoom = position.zoom,
+              onCameraIdle: () {
+                _scheduleViewportFetch();
+                _rebuildMarkers();
+              },
+            )
+          else
+            const KerbEmptyState(
+              icon: Icons.map_rounded,
+              title: 'Map preview unavailable',
+              caption: 'Google Maps has no desktop runtime — '
+                  'run the trial in Chrome (flutter run -d chrome).',
             ),
-            children: [
-              const KerbTileLayer(),
-              MarkerClusterLayerWidget(
-                options: MarkerClusterLayerOptions(
-                  maxClusterRadius: 60,
-                  size: const Size(60, 60),
-                  markers: [
-                    for (final point in points.valueOrNull ?? <MapPoint>[])
-                      _buildPin(point),
-                  ],
-                  builder: (context, markers) => KerbCluster(markers: markers),
-                ),
-              ),
-            ],
-          ),
-          const Positioned(left: 16, bottom: 96, child: KerbAttributionPill()),
           // Top chrome: brand chip + tier filters, floating over the map.
           SafeArea(
             child: Padding(
@@ -110,6 +180,10 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                   Row(
                     children: [
                       const _BrandChip(),
+                      if (ref.watch(useFakeProvider)) ...[
+                        const SizedBox(width: 8),
+                        const _DemoDataChip(),
+                      ],
                       const Spacer(),
                       IgnorePointer(
                         child: AnimatedOpacity(
@@ -132,6 +206,14 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                   ),
                   const SizedBox(height: 10),
                   const TierFilterChips(),
+                  const SizedBox(height: 10),
+                  _InViewPill(
+                    points: points.valueOrNull ?? const [],
+                    onTap: () => showBarriersListSheet(
+                      context,
+                      points.valueOrNull ?? const [],
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -173,19 +255,76 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       ),
     );
   }
+}
 
-  Marker _buildPin(MapPoint point) {
-    return TierMarker(
-      key: ValueKey(point.locationId),
-      point: point.position,
-      tier: point.tier,
-      child: Semantics(
-        button: true,
-        label:
-            '${point.name ?? 'Reported barrier'}, ${TierStyle.label(point.tier)}, ${point.reportCount} reports',
-        child: GestureDetector(
-          onTap: () => showReportDetailSheet(context, point),
-          child: KerbPin(tier: point.tier),
+/// "N barriers in view" — doubles as the entry to the accessible list view
+/// of everything the markers show.
+class _InViewPill extends StatelessWidget {
+  const _InViewPill({required this.points, required this.onTap});
+
+  final List<MapPoint> points;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 200),
+      child: points.isEmpty
+          ? const SizedBox.shrink()
+          : Semantics(
+              button: true,
+              label: '${points.length} barriers in view, open list',
+              child: GestureDetector(
+                onTap: onTap,
+                child: KerbFloatingPill(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.format_list_bulleted_rounded,
+                          size: 16, color: KerbColors.brand700),
+                      const SizedBox(width: 6),
+                      Text(
+                        '${points.length} barrier${points.length == 1 ? '' : 's'} in view',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: KerbColors.ink900,
+                        ),
+                      ),
+                      const SizedBox(width: 2),
+                      const Icon(Icons.expand_more_rounded,
+                          size: 16, color: KerbColors.ink600),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+    );
+  }
+}
+
+/// Shown when the app booted on fake data (USE_FAKE or Supabase
+/// unconfigured/unreachable) so demo pins aren't mistaken for live reports.
+class _DemoDataChip extends StatelessWidget {
+  const _DemoDataChip();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: KerbColors.warnFill,
+        borderRadius: BorderRadius.circular(999),
+        boxShadow: KerbShadows.subtle,
+      ),
+      child: const Text(
+        'Demo data',
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+          color: KerbColors.warn,
         ),
       ),
     );

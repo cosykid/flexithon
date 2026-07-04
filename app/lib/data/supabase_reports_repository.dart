@@ -1,4 +1,4 @@
-import 'package:flutter_map/flutter_map.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 
@@ -11,10 +11,10 @@ class SupabaseReportsRepository implements ReportsRepository {
   @override
   Future<List<MapPoint>> fetchMapPoints(LatLngBounds bounds) async {
     final rows = await supa.rpc('points_in_bbox', params: {
-      'min_lng': bounds.west,
-      'min_lat': bounds.south,
-      'max_lng': bounds.east,
-      'max_lat': bounds.north,
+      'min_lng': bounds.southwest.longitude,
+      'min_lat': bounds.southwest.latitude,
+      'max_lng': bounds.northeast.longitude,
+      'max_lat': bounds.northeast.latitude,
     }) as List<dynamic>;
     return rows
         .map((r) => MapPoint.fromJson(r as Map<String, dynamic>))

@@ -1,12 +1,16 @@
+import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../core/platform.dart';
 import '../../core/theme.dart';
-import '../../core/ui.dart';
 import '../../models/venue.dart';
 import '../map/map_providers.dart';
+import '../map/map_style.dart';
+import '../map/marker_icons.dart';
 import 'new_report_controller.dart';
 import 'venue_search_page.dart';
 
@@ -118,7 +122,7 @@ class _NewReportFlowState extends ConsumerState<NewReportFlow> {
                           // New report should show up in My Reports and (once
                           // classified) on the map without a manual refresh.
                           ref.invalidate(myReportsProvider);
-                          ref.invalidate(mapPointsProvider);
+                          ref.invalidate(mapPointsRawProvider);
                           if (context.mounted) Navigator.of(context).pop(true);
                         }
                       },
@@ -283,41 +287,109 @@ class _LocationPicker extends StatelessWidget {
           height: 170,
           child: ClipRRect(
             borderRadius: BorderRadius.circular(KerbRadius.sm),
-            child: FlutterMap(
-              options: MapOptions(
-                initialCenter: position,
-                initialZoom: 17,
-                onTap: (_, latLng) => controller.nudgePosition(latLng),
-              ),
-              children: [
-                const KerbTileLayer(),
-                MarkerLayer(
-                  markers: [
-                    Marker(
-                      point: position,
-                      width: 40,
-                      height: 40,
-                      alignment: Alignment.topCenter,
-                      child: const Icon(
-                        Icons.location_pin,
-                        size: 40,
-                        color: KerbColors.brand600,
-                      ),
+            child: mapsSupported
+                ? _MiniMap(
+                    position: position,
+                    onMoved: controller.nudgePosition,
+                  )
+                : Container(
+                    color: KerbColors.paper,
+                    alignment: Alignment.center,
+                    child: Text(
+                      'Pin set at ${position.latitude.toStringAsFixed(5)}, '
+                      '${position.longitude.toStringAsFixed(5)}',
+                      style: Theme.of(context).textTheme.bodySmall,
                     ),
-                  ],
-                ),
-              ],
-            ),
+                  ),
           ),
         ),
         Padding(
           padding: const EdgeInsets.only(top: 8),
           child: Text(
-            'Tap the map to fine-tune the pin.',
+            'Drag the pin or tap the map to fine-tune the spot.',
             style: Theme.of(context).textTheme.bodySmall,
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Embedded Google map with a draggable brand pin. Eager gesture recognizer
+/// claims drags so the surrounding ListView doesn't steal them.
+class _MiniMap extends StatefulWidget {
+  const _MiniMap({required this.position, required this.onMoved});
+
+  final LatLng position;
+  final ValueChanged<LatLng> onMoved;
+
+  @override
+  State<_MiniMap> createState() => _MiniMapState();
+}
+
+class _MiniMapState extends State<_MiniMap> {
+  GoogleMapController? _controller;
+  BitmapDescriptor? _pin;
+  LatLng? _selfMove;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_pin == null) {
+      KerbMarkerIcons(MediaQuery.devicePixelRatioOf(context))
+          .brandPin()
+          .then((icon) {
+        if (mounted) setState(() => _pin = icon);
+      });
+    }
+  }
+
+  @override
+  void didUpdateWidget(_MiniMap old) {
+    super.didUpdateWidget(old);
+    // Re-centre only on external jumps (fresh GPS fix), not on the user's
+    // own drag/tap — yanking the camera mid-gesture feels broken.
+    if (widget.position != old.position && widget.position != _selfMove) {
+      _controller?.animateCamera(CameraUpdate.newLatLng(widget.position));
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller?.dispose();
+    super.dispose();
+  }
+
+  void _moved(LatLng latLng) {
+    _selfMove = latLng;
+    widget.onMoved(latLng);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GoogleMap(
+      initialCameraPosition: CameraPosition(target: widget.position, zoom: 17),
+      style: kerbMapStyle,
+      onMapCreated: (controller) => _controller = controller,
+      onTap: _moved,
+      markers: {
+        Marker(
+          markerId: const MarkerId('report-position'),
+          position: widget.position,
+          draggable: true,
+          onDragEnd: _moved,
+          icon: _pin ?? BitmapDescriptor.defaultMarker,
+          anchor: const Offset(0.5, 1),
+        ),
+      },
+      gestureRecognizers: const {
+        Factory<OneSequenceGestureRecognizer>(EagerGestureRecognizer.new),
+      },
+      zoomControlsEnabled: false,
+      myLocationButtonEnabled: false,
+      mapToolbarEnabled: false,
+      compassEnabled: false,
+      tiltGesturesEnabled: false,
     );
   }
 }
