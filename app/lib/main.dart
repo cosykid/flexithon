@@ -28,7 +28,7 @@ Future<void> main() async {
     try {
       await Supabase.initialize(
         url: Env.supabaseUrl,
-        anonKey: Env.supabaseAnonKey,
+        publishableKey: Env.supabaseAnonKey,
       );
       // Anonymous auth: enough for RLS (role `authenticated`); device-scoped.
       if (Supabase.instance.client.auth.currentSession == null) {
