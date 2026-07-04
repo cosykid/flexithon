@@ -33,5 +33,9 @@ jobs:
       - uses: denoland/setup-deno@v2
         with:
           deno-version: v2.x
-      - run: deno check index.ts aiClient.ts tools.ts classify.ts geo.ts classify_test.ts
+      - run: deno lint .
+      # index.ts is excluded from `deno check`: its jsr:@supabase/supabase-js
+      # import pulls npm dependencies that Deno 2 only type-checks against a
+      # local node_modules; Supabase's own deploy bundler validates index.ts.
+      - run: deno check aiClient.ts tools.ts classify.ts geo.ts classify_test.ts
       - run: deno test classify_test.ts

@@ -2,6 +2,9 @@
 // Invoke with {"report_id": "<uuid>"} right after a report is inserted, or
 // {"sweep": true} to retry all pending reports older than 2 minutes.
 
+// Inline jsr: import is the standard pattern for Supabase edge functions
+// deployed without a deno.json.
+// deno-lint-ignore no-import-prefix
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { runVerification } from "./aiClient.ts";
 import { classify } from "./classify.ts";
