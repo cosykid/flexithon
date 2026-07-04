@@ -116,6 +116,14 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                 options: MarkerClusterLayerOptions(
                   maxClusterRadius: 60,
                   size: const Size(60, 60),
+                  // No translate animation on split/merge — pins and
+                  // clusters fade in on mount instead (KerbFadeIn).
+                  animationsOptions: const AnimationsOptions(
+                    zoom: Duration.zero,
+                    fitBound: Duration(milliseconds: 400),
+                    centerMarker: Duration(milliseconds: 400),
+                    spiderfy: Duration(milliseconds: 300),
+                  ),
                   markers: [
                     for (final point in points.valueOrNull ?? <MapPoint>[])
                       _buildPin(point),
@@ -212,13 +220,15 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       key: ValueKey(point.locationId),
       point: point.position,
       tier: point.tier,
-      child: Semantics(
-        button: true,
-        label:
-            '${point.name ?? 'Reported barrier'}, ${TierStyle.label(point.tier)}, ${point.reportCount} reports',
-        child: GestureDetector(
-          onTap: () => showReportDetailSheet(context, point),
-          child: KerbPin(tier: point.tier),
+      child: KerbFadeIn(
+        child: Semantics(
+          button: true,
+          label:
+              '${point.name ?? 'Reported barrier'}, ${TierStyle.label(point.tier)}, ${point.reportCount} reports',
+          child: GestureDetector(
+            onTap: () => showReportDetailSheet(context, point),
+            child: KerbPin(tier: point.tier),
+          ),
         ),
       ),
     );
