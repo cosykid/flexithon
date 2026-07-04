@@ -3,53 +3,54 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../models/report.dart';
 
-/// Kerb design system — named for the kerb cut, the quiet piece of design
-/// that makes a street usable. Warm paper surfaces, deep petrol ink, a teal
-/// brand, and tier semantics (red/amber) that carry through pins, rings and
-/// badges. Purpose-built for one-handed portrait use: 56dp touch targets,
-/// bottom-anchored actions, sheet-first navigation.
+/// Kerb design system, Google Maps edition — white surfaces, Google blue,
+/// Roboto type, grey inks and hairlines straight from the Maps app. Tier
+/// semantics (red/amber) stay, remapped to Google's red and amber so pins,
+/// rings and badges keep their meaning. Purpose-built for one-handed
+/// portrait use: generous touch targets, bottom-anchored actions,
+/// sheet-first navigation.
 abstract final class KerbColors {
-  // Ink (text / dark chrome)
-  static const ink900 = Color(0xFF10222A);
-  static const ink600 = Color(0xFF43606C);
-  static const ink300 = Color(0xFF9BB0B8);
+  // Ink (text / dark chrome) — Google grey ramp
+  static const ink900 = Color(0xFF202124);
+  static const ink600 = Color(0xFF5F6368);
+  static const ink300 = Color(0xFF9AA0A6);
 
   // Surfaces
-  static const paper = Color(0xFFF6F4EF); // scaffold
+  static const paper = Color(0xFFF8F9FA); // scaffold
   static const surface = Color(0xFFFFFFFF); // cards, sheets
-  static const line = Color(0xFFE8E3D8); // warm hairline
+  static const line = Color(0xFFDADCE0); // grey hairline
 
-  // Brand (teal)
-  static const brand700 = Color(0xFF0A5A4A);
-  static const brand600 = Color(0xFF0C6B58);
-  static const brand100 = Color(0xFFDCEFE9);
+  // Brand (Google blue)
+  static const brand700 = Color(0xFF1967D2);
+  static const brand600 = Color(0xFF1A73E8);
+  static const brand100 = Color(0xFFE8F0FE);
 
-  // Tier semantics
-  static const danger = Color(0xFFC6423F); // substantiated
-  static const dangerFill = Color(0xFFFAE7E6);
-  static const warn = Color(0xFFB97710); // partial (text-safe amber)
-  static const warnBright = Color(0xFFE9A23B); // partial (pins/rings)
-  static const warnFill = Color(0xFFFBEED7);
+  // Tier semantics (Google red / amber)
+  static const danger = Color(0xFFD93025); // substantiated
+  static const dangerFill = Color(0xFFFCE8E6);
+  static const warn = Color(0xFFB06000); // partial (text-safe amber)
+  static const warnBright = Color(0xFFF9AB00); // partial (pins/rings)
+  static const warnFill = Color(0xFFFEF7E0);
 
   // Status
-  static const pending = Color(0xFF5B7C8A);
-  static const pendingFill = Color(0xFFE4ECEF);
+  static const pending = Color(0xFF5F6368);
+  static const pendingFill = Color(0xFFF1F3F4);
 
-  static const frame = Color(0xFF0B1215); // desktop phone-frame backdrop
+  static const frame = Color(0xFF202124); // desktop phone-frame backdrop
 }
 
 abstract final class KerbRadius {
-  static const sm = 12.0;
-  static const md = 18.0;
-  static const lg = 28.0;
+  static const sm = 8.0;
+  static const md = 12.0;
+  static const lg = 20.0;
 }
 
 abstract final class KerbShadows {
   static const soft = [
-    BoxShadow(color: Color(0x1410222A), blurRadius: 24, offset: Offset(0, 8)),
+    BoxShadow(color: Color(0x2620212A), blurRadius: 10, offset: Offset(0, 2)),
   ];
   static const subtle = [
-    BoxShadow(color: Color(0x0F10222A), blurRadius: 12, offset: Offset(0, 4)),
+    BoxShadow(color: Color(0x1A202124), blurRadius: 6, offset: Offset(0, 1)),
   ];
 }
 
@@ -95,16 +96,16 @@ abstract final class TierStyle {
 
 TextStyle kerbDisplay({
   double size = 20,
-  FontWeight weight = FontWeight.w700,
+  FontWeight weight = FontWeight.w600,
   Color color = KerbColors.ink900,
   double? height,
 }) =>
-    GoogleFonts.sora(
+    GoogleFonts.roboto(
       fontSize: size,
       fontWeight: weight,
       color: color,
       height: height,
-      letterSpacing: -0.3,
+      letterSpacing: 0,
     );
 
 ThemeData buildTheme() {
@@ -123,32 +124,31 @@ ThemeData buildTheme() {
   );
 
   final base = ThemeData(useMaterial3: true, colorScheme: scheme);
-  final text = GoogleFonts.interTextTheme(base.textTheme)
+  final text = GoogleFonts.robotoTextTheme(base.textTheme)
       .apply(bodyColor: KerbColors.ink900, displayColor: KerbColors.ink900)
       .copyWith(
         headlineSmall: kerbDisplay(size: 24),
         titleLarge: kerbDisplay(size: 20),
-        titleMedium: kerbDisplay(size: 16, weight: FontWeight.w600),
-        titleSmall: kerbDisplay(size: 14, weight: FontWeight.w600),
-        bodyMedium: GoogleFonts.inter(
+        titleMedium: kerbDisplay(size: 16),
+        titleSmall: kerbDisplay(size: 14),
+        bodyMedium: GoogleFonts.roboto(
           fontSize: 14.5,
           height: 1.45,
           color: KerbColors.ink900,
         ),
-        bodySmall: GoogleFonts.inter(
+        bodySmall: GoogleFonts.roboto(
           fontSize: 12.5,
           height: 1.4,
           color: KerbColors.ink600,
         ),
-        labelLarge: GoogleFonts.inter(
+        labelLarge: GoogleFonts.roboto(
           fontSize: 14,
-          fontWeight: FontWeight.w600,
+          fontWeight: FontWeight.w500,
         ),
       );
 
-  final buttonShape = RoundedRectangleBorder(
-    borderRadius: BorderRadius.circular(KerbRadius.md),
-  );
+  // Google buttons are full pills.
+  const buttonShape = StadiumBorder();
 
   return base.copyWith(
     scaffoldBackgroundColor: KerbColors.paper,
@@ -156,12 +156,12 @@ ThemeData buildTheme() {
     splashFactory: InkSparkle.splashFactory,
     materialTapTargetSize: MaterialTapTargetSize.padded,
     appBarTheme: AppBarTheme(
-      backgroundColor: KerbColors.paper,
+      backgroundColor: KerbColors.surface,
       surfaceTintColor: Colors.transparent,
       elevation: 0,
       centerTitle: false,
       foregroundColor: KerbColors.ink900,
-      titleTextStyle: kerbDisplay(size: 20),
+      titleTextStyle: kerbDisplay(size: 20, weight: FontWeight.w500),
     ),
     cardTheme: base.cardTheme.copyWith(
       color: KerbColors.surface,
@@ -175,38 +175,40 @@ ThemeData buildTheme() {
     ),
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
-        minimumSize: const Size(64, 56),
+        minimumSize: const Size(64, 52),
         shape: buttonShape,
         backgroundColor: KerbColors.brand600,
         foregroundColor: Colors.white,
-        textStyle: kerbDisplay(size: 15, weight: FontWeight.w600, color: Colors.white),
+        textStyle:
+            GoogleFonts.roboto(fontSize: 15, fontWeight: FontWeight.w500),
       ),
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(
-        minimumSize: const Size(64, 52),
+        minimumSize: const Size(64, 48),
         shape: buttonShape,
-        side: const BorderSide(color: KerbColors.line, width: 1.4),
-        foregroundColor: KerbColors.ink900,
+        side: const BorderSide(color: KerbColors.line),
+        foregroundColor: KerbColors.brand600,
         backgroundColor: KerbColors.surface,
-        textStyle: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600),
+        textStyle:
+            GoogleFonts.roboto(fontSize: 14, fontWeight: FontWeight.w500),
       ),
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      fillColor: KerbColors.surface,
-      hintStyle: GoogleFonts.inter(fontSize: 14, color: KerbColors.ink300),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      fillColor: KerbColors.pendingFill,
+      hintStyle: GoogleFonts.roboto(fontSize: 14, color: KerbColors.ink600),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(KerbRadius.md),
-        borderSide: const BorderSide(color: KerbColors.line),
+        borderRadius: BorderRadius.circular(KerbRadius.lg),
+        borderSide: BorderSide.none,
       ),
       enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(KerbRadius.md),
-        borderSide: const BorderSide(color: KerbColors.line),
+        borderRadius: BorderRadius.circular(KerbRadius.lg),
+        borderSide: BorderSide.none,
       ),
       focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(KerbRadius.md),
+        borderRadius: BorderRadius.circular(KerbRadius.lg),
         borderSide: const BorderSide(color: KerbColors.brand600, width: 2),
       ),
     ),
@@ -220,21 +222,54 @@ ThemeData buildTheme() {
     ),
     snackBarTheme: SnackBarThemeData(
       backgroundColor: KerbColors.ink900,
-      contentTextStyle: GoogleFonts.inter(fontSize: 14, color: Colors.white),
+      contentTextStyle: GoogleFonts.roboto(fontSize: 14, color: Colors.white),
       behavior: SnackBarBehavior.floating,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(KerbRadius.sm),
       ),
     ),
     dividerTheme: const DividerThemeData(color: KerbColors.line, thickness: 1),
+    popupMenuTheme: PopupMenuThemeData(
+      color: KerbColors.surface,
+      surfaceTintColor: Colors.transparent,
+      elevation: 6,
+      shadowColor: const Color(0x33202124),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(KerbRadius.md),
+      ),
+      textStyle: GoogleFonts.roboto(fontSize: 14, color: KerbColors.ink900),
+    ),
+    navigationBarTheme: NavigationBarThemeData(
+      backgroundColor: KerbColors.surface,
+      surfaceTintColor: Colors.transparent,
+      indicatorColor: KerbColors.brand100,
+      height: 64,
+      elevation: 0,
+      labelTextStyle: WidgetStateProperty.resolveWith(
+        (states) => GoogleFonts.roboto(
+          fontSize: 12,
+          fontWeight: FontWeight.w500,
+          color: states.contains(WidgetState.selected)
+              ? KerbColors.brand700
+              : KerbColors.ink600,
+        ),
+      ),
+      iconTheme: WidgetStateProperty.resolveWith(
+        (states) => IconThemeData(
+          size: 22,
+          color: states.contains(WidgetState.selected)
+              ? KerbColors.brand700
+              : KerbColors.ink600,
+        ),
+      ),
+    ),
     floatingActionButtonTheme: FloatingActionButtonThemeData(
       backgroundColor: KerbColors.brand600,
       foregroundColor: Colors.white,
       elevation: 3,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(KerbRadius.md),
-      ),
-      extendedTextStyle: kerbDisplay(size: 15, weight: FontWeight.w600, color: Colors.white),
+      shape: const StadiumBorder(),
+      extendedTextStyle:
+          GoogleFonts.roboto(fontSize: 14, fontWeight: FontWeight.w500),
     ),
   );
 }
