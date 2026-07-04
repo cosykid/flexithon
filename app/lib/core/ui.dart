@@ -114,8 +114,9 @@ class _NotchPainter extends CustomPainter {
   bool shouldRepaint(_NotchPainter old) => old.color != color;
 }
 
-/// Cluster circle: count in the middle, ring split proportionally between
-/// red (substantiated) and amber (partial) — the cluster itself is data.
+/// Cluster circle: count in the middle, filled with the weighted blend of
+/// its members' tier colours — mostly partial reports read amber, mostly
+/// substantiated reads red, mixes land in between.
 class KerbCluster extends StatelessWidget {
   const KerbCluster({super.key, required this.markers});
 
@@ -127,60 +128,34 @@ class KerbCluster extends StatelessWidget {
     final substantiated =
         tiers.where((m) => m.tier == ReportTier.substantiated).length;
     final total = math.max(tiers.length, 1);
+    final redFraction = substantiated / total;
+    final fill = Color.lerp(
+      KerbColors.warnBright,
+      KerbColors.danger,
+      redFraction,
+    )!;
     final size = markers.length >= 100
         ? 60.0
         : markers.length >= 10
             ? 52.0
             : 46.0;
 
-    return CustomPaint(
-      painter: _ClusterRingPainter(redFraction: substantiated / total),
-      child: Container(
-        width: size,
-        height: size,
-        alignment: Alignment.center,
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          shape: BoxShape.circle,
-          boxShadow: KerbShadows.subtle,
-        ),
-        child: Text(
-          '${markers.length}',
-          style: kerbDisplay(size: size * 0.32),
-        ),
+    return Container(
+      width: size,
+      height: size,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: fill,
+        shape: BoxShape.circle,
+        border: Border.all(color: Colors.white, width: 3),
+        boxShadow: KerbShadows.subtle,
+      ),
+      child: Text(
+        '${markers.length}',
+        style: kerbDisplay(size: size * 0.32, color: Colors.white),
       ),
     );
   }
-}
-
-class _ClusterRingPainter extends CustomPainter {
-  const _ClusterRingPainter({required this.redFraction});
-
-  final double redFraction;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    const stroke = 4.5;
-    final rect = Offset.zero & size;
-    final arcRect = rect.deflate(stroke / 2 + 1);
-    final paint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = stroke
-      ..strokeCap = StrokeCap.round;
-
-    const start = -math.pi / 2;
-    final redSweep = 2 * math.pi * redFraction;
-    if (redFraction > 0) {
-      canvas.drawArc(arcRect, start, redSweep, false, paint..color = KerbColors.danger);
-    }
-    if (redFraction < 1) {
-      canvas.drawArc(arcRect, start + redSweep, 2 * math.pi - redSweep, false,
-          paint..color = KerbColors.warnBright);
-    }
-  }
-
-  @override
-  bool shouldRepaint(_ClusterRingPainter old) => old.redFraction != redFraction;
 }
 
 class TierBadge extends StatelessWidget {
