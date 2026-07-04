@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'core/env.dart';
+import 'core/maps_loader.dart';
 import 'core/theme.dart';
 import 'features/map/map_providers.dart';
 import 'features/map/map_screen.dart';
@@ -22,6 +23,9 @@ bool get _supabaseConfigured =>
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Web: google.maps must exist before the first GoogleMap widget builds.
+  await loadMapsApi();
 
   var useFake = Env.useFake || !_supabaseConfigured;
   if (!useFake) {
