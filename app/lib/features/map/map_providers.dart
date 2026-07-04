@@ -1,6 +1,5 @@
-import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:latlong2/latlong.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../../core/env.dart';
 import '../../data/fake_reports_repository.dart';
@@ -9,23 +8,35 @@ import '../../data/supabase_reports_repository.dart';
 import '../../models/map_point.dart';
 import '../../models/report.dart';
 
+/// True when running on fake in-memory data — either requested via
+/// --dart-define=USE_FAKE=true or forced at startup because Supabase is
+/// unconfigured/unreachable (main() overrides this so the app never
+/// white-screens on a bad backend config).
+final useFakeProvider = Provider<bool>((ref) => Env.useFake);
+
 final repositoryProvider = Provider<ReportsRepository>(
-  (ref) => Env.useFake ? FakeReportsRepository() : SupabaseReportsRepository(),
+  (ref) => ref.watch(useFakeProvider)
+      ? FakeReportsRepository()
+      : SupabaseReportsRepository(),
 );
 
 /// Records have structural equality, so this is a stable FutureProvider key
 /// (LatLngBounds equality is not guaranteed across instances).
 typedef Bbox = ({double west, double south, double east, double north});
 
-Bbox bboxOf(LatLngBounds b) =>
-    (west: b.west, south: b.south, east: b.east, north: b.north);
-
-LatLngBounds boundsOf(Bbox b) => LatLngBounds(
-      LatLng(b.south, b.west),
-      LatLng(b.north, b.east),
+Bbox bboxOf(LatLngBounds b) => (
+      west: b.southwest.longitude,
+      south: b.southwest.latitude,
+      east: b.northeast.longitude,
+      north: b.northeast.latitude,
     );
 
-/// Current viewport, set by MapScreen after (debounced) map movement.
+LatLngBounds boundsOf(Bbox b) => LatLngBounds(
+      southwest: LatLng(b.south, b.west),
+      northeast: LatLng(b.north, b.east),
+    );
+
+/// Current viewport, set by MapScreen after (debounced) camera idle.
 final mapBboxProvider = StateProvider<Bbox?>((ref) => null);
 
 /// Which tiers the user wants to see (filter chips).
@@ -33,13 +44,33 @@ final tierFilterProvider = StateProvider<Set<ReportTier>>(
   (ref) => {ReportTier.substantiated, ReportTier.partiallySubstantiated},
 );
 
-final mapPointsProvider = FutureProvider<List<MapPoint>>((ref) async {
+/// Everything in the viewport, unfiltered — the chips read this for counts.
+final mapPointsRawProvider = FutureProvider<List<MapPoint>>((ref) async {
   final bbox = ref.watch(mapBboxProvider);
   if (bbox == null) return [];
-  final points =
-      await ref.watch(repositoryProvider).fetchMapPoints(boundsOf(bbox));
+  return ref.watch(repositoryProvider).fetchMapPoints(boundsOf(bbox));
+});
+
+/// The raw viewport points narrowed to the active tier filter.
+///
+/// Refetches (pan/zoom) keep the previous points visible: the loading state
+/// carries the last data forward so markers never blink out mid-gesture —
+/// only `isLoading` flips for the spinner.
+final mapPointsProvider = Provider<AsyncValue<List<MapPoint>>>((ref) {
+  final raw = ref.watch(mapPointsRawProvider);
   final filter = ref.watch(tierFilterProvider);
-  return points.where((p) => filter.contains(p.tier)).toList();
+  final points = raw.valueOrNull;
+  if (points == null) {
+    return raw.whenData(
+      (p) => p.where((e) => filter.contains(e.tier)).toList(),
+    );
+  }
+  final filtered = AsyncData(
+    points.where((p) => filter.contains(p.tier)).toList(),
+  );
+  return raw.isLoading
+      ? const AsyncValue<List<MapPoint>>.loading().copyWithPrevious(filtered)
+      : filtered;
 });
 
 final locationReportsProvider =

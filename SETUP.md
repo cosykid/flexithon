@@ -8,11 +8,12 @@ repo root unless stated otherwise.
 | Destination | Keys | Set via |
 |---|---|---|
 | **Server** (edge function) | `AI_BASE_URL`, `AI_API_KEY`, `AI_MODEL`, `TAVILY_API_KEY`, `GOOGLE_PLACES_KEY` | `supabase secrets set` (§5) |
-| **App** (client) | `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `STADIA_API_KEY`, `GOOGLE_PLACES_KEY` | `--dart-define` on `flutter run` (§7) |
+| **App** (client) | `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `GOOGLE_PLACES_KEY` | `--dart-define` on `flutter run` (§7) |
+| **App** (platform config) | Google Maps SDK key | Android: `MAPS_API_KEY` env var / gradle property · iOS: `GMSApiKey` in `ios/Runner/Info.plist` · Web: `<script>` tag in `web/index.html` |
 
 `GOOGLE_PLACES_KEY` appears in both: server uses it for the verifier's
 `get_place_accessibility` tool, app uses it for venue-tagging search.
-`STADIA_API_KEY` is optional — without it the app falls back to CARTO tiles.
+The Maps SDK key can be the same GCP key with the Maps SDKs enabled.
 
 ---
 
@@ -55,8 +56,7 @@ Check: `select count(*) from reports;` → ~45.
 | Key | Where | Card? |
 |---|---|---|
 | Tavily | app.tavily.com → API key | no |
-| Stadia Maps | client.stadiamaps.com → property → API key | no |
-| Google Places | console.cloud.google.com → enable billing → enable **Places API (New)** → Credentials → API key | **yes** |
+| Google Maps + Places | console.cloud.google.com → enable billing → enable **Places API (New)**, **Maps SDK for Android**, **Maps SDK for iOS**, **Maps JavaScript API** → Credentials → API key | **yes** |
 | AI endpoint | any OpenAI-compatible with **vision + tool calling** (e.g. `gpt-4o-mini`) | varies |
 
 ## 5. Server secrets + deploy edge function
@@ -116,7 +116,7 @@ Copy the template, fill in keys, run:
 ```bash
 cp app/run.example.sh app/run.sh        # run.sh is gitignored
 # edit app/run.sh with your keys
-./app/run.sh linux                      # desktop trial
+./app/run.sh chrome                     # browser trial in the phone frame
 ./app/run.sh                            # default device (phone via USB)
 ```
 
@@ -124,14 +124,17 @@ Or by hand:
 
 ```bash
 cd app
-flutter run -d linux \
+MAPS_API_KEY=<android-maps-key> flutter run \
   --dart-define=SUPABASE_URL=https://<ref>.supabase.co \
   --dart-define=SUPABASE_ANON_KEY=<anon-key> \
-  --dart-define=STADIA_API_KEY=<stadia-key> \
   --dart-define=GOOGLE_PLACES_KEY=<places-key>
 ```
 
-No backend? Demo parachute: `flutter run -d linux --dart-define=USE_FAKE=true`
+Web trial needs the Maps key in `web/index.html` (replace
+`YOUR_WEB_MAPS_API_KEY`); iOS needs it in `ios/Runner/Info.plist` (`GMSApiKey`).
+Native desktop targets have no Google Maps runtime — use Chrome for trials.
+
+No backend? Demo parachute: `flutter run -d chrome --dart-define=USE_FAKE=true`
 
 ## 8. Demo prep
 
