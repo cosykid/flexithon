@@ -10,10 +10,14 @@ import 'package:latlong2/latlong.dart';
 import '../../core/theme.dart';
 import '../../core/ui.dart';
 import '../../models/map_point.dart';
+import '../../models/venue.dart';
 import '../new_report/new_report_flow.dart';
+import '../new_report/venue_search_page.dart';
 import '../report_detail/report_detail_sheet.dart';
 import 'map_providers.dart';
+import 'onboarding_sheet.dart';
 import 'tier_filter_chips.dart';
+import 'verification_watcher.dart';
 
 class MapScreen extends ConsumerStatefulWidget {
   const MapScreen({super.key});
@@ -27,6 +31,28 @@ class _MapScreenState extends ConsumerState<MapScreen> {
 
   final _mapController = MapController();
   Timer? _debounce;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) maybeShowOnboarding(context);
+    });
+  }
+
+  Future<void> _searchPlaces() async {
+    final picked = await Navigator.of(context).push<Venue>(
+      MaterialPageRoute(
+        builder: (_) => VenueSearchPage(
+          near: _mapController.camera.center,
+          title: 'Search places',
+        ),
+      ),
+    );
+    if (picked != null) {
+      _mapController.move(picked.position, 16.5);
+    }
+  }
 
   @override
   void dispose() {
@@ -111,6 +137,12 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                     children: [
                       const _BrandChip(),
                       const Spacer(),
+                      _RoundIconButton(
+                        icon: Icons.search_rounded,
+                        tooltip: 'Search places',
+                        onTap: _searchPlaces,
+                      ),
+                      const SizedBox(width: 8),
                       IgnorePointer(
                         child: AnimatedOpacity(
                           opacity: points.isLoading ? 1 : 0,
@@ -154,15 +186,16 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                   icon: const Icon(Icons.add_a_photo_rounded),
                   label: const Text('Report barrier'),
                   onPressed: () async {
-                    final submitted = await Navigator.of(context).push<bool>(
+                    final reportId = await Navigator.of(context).push<String>(
                       MaterialPageRoute(builder: (_) => const NewReportFlow()),
                     );
-                    if (submitted == true && context.mounted) {
+                    if (reportId != null && context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
                           content: Text('Report submitted — verifying with AI…'),
                         ),
                       );
+                      ref.read(verificationWatcherProvider).watch(reportId);
                     }
                   },
                 ),

@@ -8,6 +8,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'core/env.dart';
 import 'core/theme.dart';
+import 'core/ui.dart';
 import 'features/map/map_screen.dart';
 import 'features/my_reports/my_reports_screen.dart';
 
@@ -17,7 +18,7 @@ Future<void> main() async {
   if (!Env.useFake) {
     await Supabase.initialize(
       url: Env.supabaseUrl,
-      anonKey: Env.supabaseAnonKey,
+      publishableKey: Env.supabaseAnonKey,
     );
     // Anonymous auth: enough for RLS (role `authenticated`); device-scoped.
     if (Supabase.instance.client.auth.currentSession == null) {
@@ -39,6 +40,7 @@ class AccessMapApp extends StatelessWidget {
     return MaterialApp(
       title: 'AccessMap',
       theme: buildTheme(),
+      scaffoldMessengerKey: kerbMessengerKey,
       // Desktop trial runs inside a 9:19.5 phone frame so the mobile-first
       // layout is seen as designed.
       builder: !_isDesktop

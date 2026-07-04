@@ -22,11 +22,38 @@ dependencies:
   http: ^1.2.2
   uuid: ^4.4.2
   intl: ^0.19.0
+  shared_preferences: ^2.3.2
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^4.0.0
+  flutter_launcher_icons: ^0.14.1
+  flutter_native_splash: ^2.4.1
 
 flutter:
   uses-material-design: true
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  remove_alpha_ios: true
+  image_path: assets/icon/icon.png
+  adaptive_icon_background: "#0C6B58"
+  adaptive_icon_foreground: assets/icon/icon_fg.png
+  web:
+    generate: true
+    image_path: assets/icon/icon.png
+  windows:
+    generate: true
+    image_path: assets/icon/icon.png
+  macos:
+    generate: true
+    image_path: assets/icon/icon.png
+
+flutter_native_splash:
+  color: "#F6F4EF"
+  image: assets/icon/splash.png
+  android_12:
+    color: "#F6F4EF"
+    image: assets/icon/splash.png

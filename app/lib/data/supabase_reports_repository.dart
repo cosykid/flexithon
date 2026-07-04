@@ -44,7 +44,7 @@ class SupabaseReportsRepository implements ReportsRepository {
   }
 
   @override
-  Future<void> submitReport(ReportDraft draft) async {
+  Future<String> submitReport(ReportDraft draft) async {
     final uid = supa.auth.currentUser!.id;
 
     final locationId = await supa.rpc('upsert_location', params: {
@@ -84,6 +84,18 @@ class SupabaseReportsRepository implements ReportsRepository {
     supa.functions
         .invoke('classify-report', body: {'report_id': inserted['id']})
         .then((_) {}, onError: (_) {});
+
+    return inserted['id'] as String;
+  }
+
+  @override
+  Future<Report?> fetchReport(String reportId) async {
+    final row = await supa
+        .from('reports')
+        .select('*, locations(name)')
+        .eq('id', reportId)
+        .maybeSingle();
+    return row == null ? null : Report.fromJson(row);
   }
 
   @override

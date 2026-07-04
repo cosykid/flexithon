@@ -9,6 +9,10 @@ import 'theme.dart';
 
 /// Shared Kerb components: map chrome, pins, badges, empty states.
 
+/// App-wide messenger so background work (e.g. the verification watcher)
+/// can announce results regardless of which screen is showing.
+final kerbMessengerKey = GlobalKey<ScaffoldMessengerState>();
+
 /// Basemap. Stadia "Alidade Smooth" when a key is set; CARTO light for
 /// keyless dev — both are calm, low-saturation canvases that let the
 /// tier-coloured pins carry the information.

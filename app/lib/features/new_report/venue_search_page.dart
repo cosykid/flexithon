@@ -6,11 +6,17 @@ import '../../core/theme.dart';
 import '../../data/places_api.dart';
 import '../../models/venue.dart';
 
-/// Search Google Places near the report position; pops with the chosen Venue.
+/// Search Google Places near a point; pops with the chosen Venue.
+/// Used both for tagging a report to a venue and for the map search bar.
 class VenueSearchPage extends StatefulWidget {
-  const VenueSearchPage({super.key, required this.near});
+  const VenueSearchPage({
+    super.key,
+    required this.near,
+    this.title = 'Tag a venue',
+  });
 
   final LatLng near;
+  final String title;
 
   @override
   State<VenueSearchPage> createState() => _VenueSearchPageState();
@@ -41,7 +47,7 @@ class _VenueSearchPageState extends State<VenueSearchPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Tag a venue')),
+      appBar: AppBar(title: Text(widget.title)),
       body: Column(
         children: [
           if (Env.googlePlacesKey.isEmpty)
