@@ -1,16 +1,5 @@
 {
-  "name": "curbcut",
-  "version": "0.1.0",
-  "private": true,
-  "type": "module",
-  "description": "CurbCut — photograph accessibility barriers, AI-verify them, map them, and auto-draft reports to councils",
-  "scripts": {
-    "start": "node server/index.js",
-    "seed": "node server/seed.js"
-  },
-  "dependencies": {
-    "@anthropic-ai/sdk": "^0.110.0",
-    "express": "^5.2.1",
-    "leaflet": "^1.9.4"
+  "devDependencies": {
+    "supabase": "^2.109.0"
   }
 }

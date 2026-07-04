@@ -1,0 +1,32 @@
+name: accessmap
+description: Crowdsourced accessibility barrier reporting for wheelchair users.
+publish_to: "none"
+version: 0.1.0
+
+environment:
+  sdk: ">=3.4.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_riverpod: ^2.6.1
+  google_fonts: ^6.2.1
+  supabase_flutter: ^2.8.0
+  flutter_map: ^8.1.1
+  flutter_map_marker_cluster: ^8.2.2
+  latlong2: ^0.9.1
+  geolocator: ^13.0.1
+  image_picker: ^1.1.2
+  flutter_image_compress: ^2.3.0
+  cached_network_image: ^3.4.1
+  http: ^1.2.2
+  uuid: ^4.4.2
+  intl: ^0.19.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true

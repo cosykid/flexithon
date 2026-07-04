@@ -1,78 +1,133 @@
-# CurbCut
+# AccessMap
 
-**See the barriers. Fix the city.**
+Crowdsourced accessibility-barrier reporting for wheelchair users and people with
+walking-centric disabilities. Report an inaccessible place with a photo; an AI
+pipeline verifies the photo, investigates the venue's public accessibility claims
+online, and classifies the report. Verified reports appear as clustered pins on a map.
 
-Photograph an accessibility barrier with your phone → Claude verifies the photo, rates the severity, and drafts a formal report letter to the council or facility owner → the barrier lands on a live community map that also records verified *accessible* places (the knowledge layer over the street map).
+## Substantiation tiers
 
-Named after the [curb-cut effect](https://en.wikipedia.org/wiki/Curb_cut_effect): accessibility fixes help everyone.
+| Tier | Meaning | On map |
+|---|---|---|
+| Unsubstantiated | Description only — no confirming photo, no online corroboration | No |
+| Partially substantiated (amber) | Photo confirms the barrier, but the venue claims accessibility online | Yes |
+| Substantiated (red) | Photo confirms the barrier and the venue claims nothing / inaccessibility — or ≥5 partial reports at one location (auto-promoted) | Yes |
 
-## What it does
+The AI reports facts (what the photo shows, what the venue claims); the tier rules
+are deterministic code (`supabase/functions/classify-report/classify.ts` + the
+rollup trigger in `supabase/migrations/004_trigger.sql`).
 
-- **Phone-camera reporting** — the Report button opens the camera on mobile (`capture="environment"`), grabs GPS automatically, and compresses the photo client-side. No account needed.
-- **AI verification (Claude vision)** — every photo is checked against the reported category and description: is this a real barrier? How severe (1–5)? Who does it affect? What are the concrete fixes? Unverifiable photos stay in "awaiting verification" instead of polluting the map.
-- **Auto-drafted council letters** — for verified barriers Claude writes a formal, courteous letter citing the correct legislation for the country (Equality Act 2010, ADA, AS 1428, …) with evidence, GPS coordinates and requested remediation. Copy it or open it straight in your email client.
-- **Accessibility knowledge map** — barriers colored by severity, green pins for verified accessible features (step-free entrances, Changing Places toilets, working lifts…), blue for fixed, dashed grey for pending. Filterable.
-- **Duplicate detection** — a report within 30 m of an open report of the same type becomes a "+1 confirmation" instead of a duplicate pin, so councils see *demand*, not noise.
-- **Status lifecycle** — reported → verified → sent → acknowledged → fixed, visible as a timeline on every report.
-- **Council dashboard** (`/council.html`) — open barriers, median days open, category breakdown, and one-click status updates that reporters see instantly.
-- **Community layer** — "still there" confirmations, optional reporter names, and a street-champions leaderboard.
-- **Accessible by design** — Atkinson Hyperlegible type (designed by the Braille Institute), WCAG-minded contrast, keyboard/focus support, color-blind-safe status palette with shape + size + label secondary encoding.
+## Stack
 
-## Quickstart
+- **Flutter** — `flutter_map` + `flutter_map_marker_cluster` (animated zoom-based clustering), Riverpod, `supabase_flutter`
+- **Supabase** — Postgres + PostGIS, anonymous auth, Storage (photos), Edge Function (Deno) for verification
+- **AI** — any OpenAI-compatible `/chat/completions` endpoint with vision + tool calling
+- **Tools the AI can call** — Tavily web search, Google Places (New) `accessibilityOptions.wheelchairAccessibleEntrance`
+- **Tiles** — Stadia Maps free tier (falls back to OSM for quick local dev; don't ship that)
+
+## Setup
+
+### 1. Supabase
 
 ```bash
-npm install
-npm run seed     # optional: demo data around London Southbank
-npm start        # → http://localhost:4141
+# Create a project at supabase.com, then:
+supabase link --project-ref <ref>
+supabase db push                      # runs migrations 001-004
+# Seed demo data (Sydney): paste supabase/seed.sql into the dashboard
+# SQL editor, or:
+psql "$(supabase db url 2>/dev/null || echo postgresql://postgres:<db-pass>@db.<ref>.supabase.co:5432/postgres)" -f supabase/seed.sql
 ```
 
-Works out of the box with **no API key** (demo mode: deterministic mock verification + template letters).
+(Local stack instead: `supabase start` then `supabase db reset` — it applies
+migrations and `seed.sql` automatically.)
 
-### Enable real AI verification
+Dashboard steps:
+- **Auth → Providers → enable Anonymous sign-ins**
+- **Storage → create private bucket `report-photos`** (policies are in `002_rls.sql`)
+
+### 2. Edge function
 
 ```bash
-cp .env.example .env    # put your ANTHROPIC_API_KEY in it
-npm start
+supabase secrets set \
+  AI_BASE_URL=https://api.openai.com/v1 \
+  AI_API_KEY=sk-... \
+  AI_MODEL=gpt-4o-mini \
+  TAVILY_API_KEY=tvly-... \
+  GOOGLE_PLACES_KEY=AIza...
+supabase functions deploy classify-report
 ```
 
-Uses `claude-opus-4-8` vision with strict JSON-schema output. Override with `ANTHROPIC_MODEL`, force demo mode with `CURBCUT_AI=mock`. An `ant auth login` profile also works — no env var needed.
+The model must support **vision and tool calling**. Test both on day 1:
+`supabase functions serve classify-report` and curl it with a seeded report id.
 
-### Phone demo
+Unit tests for the tier rules and geometry parsing (no keys needed):
 
-Run the server, then open `http://<your-laptop-ip>:4141` on a phone on the same Wi-Fi. The Report button opens the camera directly. (Geolocation on non-localhost HTTP is blocked by some browsers — tap the map to place the pin instead, or tunnel with HTTPS.)
-
-## Architecture
-
-```
-web/            no-build vanilla JS frontend
-  index.html    map app (Leaflet + OpenStreetMap tiles)
-  council.html  council dashboard
-server/
-  index.js      Express 5 API + static hosting
-  ai.js         Claude vision verification + letter drafting (mock fallback)
-  db.js         node:sqlite (zero native deps), haversine dedupe, stats
-  geocode.js    Nominatim reverse geocoding + per-country standards
-  seed.js       demo data generator
-data/           runtime: sqlite db + photos (gitignored)
+```bash
+cd supabase/functions/classify-report && deno test classify_test.ts
 ```
 
-| Endpoint | Purpose |
-|---|---|
-| `POST /api/reports` | photo (data URL) + GPS + category → dedupe → geocode → AI verify → pin |
-| `GET /api/reports` | all reports for the map |
-| `POST /api/reports/:id/confirm` | community "+1 still there" |
-| `POST /api/reports/:id/status` | council status updates |
-| `GET /api/stats` | dashboard tiles, category counts, leaderboard |
+If a report gets stuck pending (app killed mid-submit, endpoint down), sweep:
 
-## Roadmap ideas
+```bash
+curl -X POST "$SUPABASE_URL/functions/v1/classify-report" \
+  -H "Authorization: Bearer $SERVICE_ROLE_KEY" \
+  -H "Content-Type: application/json" -d '{"sweep": true}'
+```
 
-- Council contact directory (auto-address the letter by boundary lookup) + one-click send with tracking
-- Re-verification prompts ("is this still broken?") and photo-proof of fixes
-- Accessible routing: penalise paths through open barriers, prefer verified features
-- Overpass/OSM POI context passed to the AI verifier; write verified features back to OSM
-- Offline queue (PWA service worker) for reporting without signal
-- Council authentication + per-authority scoping; public response-time league table
-- Exports for councils: GeoJSON / CSV / monthly digest email
+### 3. Flutter app
 
----
-Prototype built for a hackathon — no auth, single sqlite file, trusts geolocation input.
+```bash
+cd app
+flutter create . --org com.hackathon --project-name accessmap   # generates android/ios
+flutter pub get
+flutter run \
+  --dart-define=SUPABASE_URL=https://<ref>.supabase.co \
+  --dart-define=SUPABASE_ANON_KEY=<anon-key> \
+  --dart-define=STADIA_API_KEY=<stadia-key> \
+  --dart-define=GOOGLE_PLACES_KEY=<places-key>
+```
+
+Platform permissions (after `flutter create`):
+- **Android** `android/app/src/main/AndroidManifest.xml`: `ACCESS_FINE_LOCATION`, `CAMERA`, `INTERNET`
+- **iOS** `ios/Runner/Info.plist`: `NSLocationWhenInUseUsageDescription`, `NSCameraUsageDescription`, `NSPhotoLibraryUsageDescription`
+
+Demo parachute — full UI on fake in-memory data, zero network:
+
+```bash
+flutter run --dart-define=USE_FAKE=true
+```
+
+### API keys needed (all free tiers)
+
+| Key | Where | Card? |
+|---|---|---|
+| Supabase URL + anon key | supabase.com project settings | No |
+| Stadia Maps | client.stadiamaps.com | No |
+| Tavily | app.tavily.com (1,000 credits/mo) | No |
+| Google Places | GCP console, enable Places API (New) — 5k Pro calls/mo | **Yes** (billing must be enabled; mobile map loads not used, only Places REST) |
+| OpenAI-compatible AI | your provider of choice | Depends |
+
+## Demo script
+
+1. Open the map — Sydney seeded with ~30 locations; clusters split as you zoom.
+2. Tap a pin — detail sheet with photo, tier badge, AI reasoning; amber pins show
+   the "venue claims accessible, photos say otherwise" callout.
+3. Submit a live report (photo of stairs) — watch it flip from *Verifying…* to a tier.
+4. **The promotion moment**: "Rosie's Cafe (demo)" is seeded with exactly 4
+   partially-substantiated reports. Submit a 5th against it — the rollup trigger
+   promotes the location and the pin turns red on the next map refresh.
+   How the 5th report attaches: untagged reports reuse the nearest existing
+   location within 30 m (`upsert_location`), and the venue's cached
+   "claims accessible" flag makes the new report classify as partial.
+   **Before the demo, edit Rosie's coordinates in `seed.sql` to the venue
+   you'll be standing in** so your live GPS lands within 30 m.
+
+## Repo layout
+
+```
+app/         Flutter app (lib/ only — run `flutter create .` inside for platforms)
+supabase/
+  migrations/  schema, RLS, RPCs, rollup/promotion trigger
+  functions/classify-report/  AI verification pipeline (Deno)
+  seed.sql     ~30 Sydney demo locations + the 4-partial promotion prop
+```
