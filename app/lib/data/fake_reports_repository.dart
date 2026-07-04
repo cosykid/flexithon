@@ -68,12 +68,13 @@ class FakeReportsRepository implements ReportsRepository {
   Future<List<Report>> fetchMyReports() async => List.of(_mine);
 
   @override
-  Future<void> submitReport(ReportDraft draft) async {
+  Future<String> submitReport(ReportDraft draft) async {
     await Future<void>.delayed(const Duration(milliseconds: 400));
+    final id = 'mine-${_mine.length}';
     _mine.insert(
       0,
       Report(
-        id: 'mine-${_mine.length}',
+        id: id,
         locationId: 'fake-mine',
         locationName: draft.venue?.name,
         description: draft.description,
@@ -81,6 +82,33 @@ class FakeReportsRepository implements ReportsRepository {
         createdAt: DateTime.now(),
       ),
     );
+    return id;
+  }
+
+  @override
+  Future<Report?> fetchReport(String reportId) async {
+    final i = _mine.indexWhere((r) => r.id == reportId);
+    if (i < 0) return null;
+    var report = _mine[i];
+    // Simulate the AI pipeline: flips to classified ~6s after submission.
+    if (report.status == ReportStatus.pending &&
+        DateTime.now().difference(report.createdAt).inSeconds >= 6) {
+      report = Report(
+        id: report.id,
+        locationId: report.locationId,
+        locationName: report.locationName,
+        description: report.description,
+        barrierType: 'stairs',
+        status: ReportStatus.classified,
+        tier: ReportTier.substantiated,
+        imageConfirmsBarrier: true,
+        aiReasoning:
+            'Demo mode: simulated verification — photo shows the barrier.',
+        createdAt: report.createdAt,
+      );
+      _mine[i] = report;
+    }
+    return report;
   }
 
   @override

@@ -113,13 +113,15 @@ class _NewReportFlowState extends ConsumerState<NewReportFlow> {
                 onPressed: !state.canSubmit
                     ? null
                     : () async {
-                        final ok = await controller.submit();
-                        if (ok) {
+                        final reportId = await controller.submit();
+                        if (reportId != null) {
                           // New report should show up in My Reports and (once
                           // classified) on the map without a manual refresh.
                           ref.invalidate(myReportsProvider);
                           ref.invalidate(mapPointsProvider);
-                          if (context.mounted) Navigator.of(context).pop(true);
+                          if (context.mounted) {
+                            Navigator.of(context).pop(reportId);
+                          }
                         }
                       },
               ),
