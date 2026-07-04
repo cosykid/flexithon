@@ -72,5 +72,7 @@
 	<string>Attach an existing photo of the accessibility barrier.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Pin your report to the location of the barrier.</string>
+	<key>GMSApiKey</key>
+	<string>REDACTED_GOOGLE_MAPS_KEY</string>
 </dict>
 </plist>

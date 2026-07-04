@@ -11,6 +11,7 @@ class TierFilterChips extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final selected = ref.watch(tierFilterProvider);
+    final inView = ref.watch(mapPointsRawProvider).valueOrNull;
     return Row(
       children: [
         for (final tier in const [
@@ -19,6 +20,7 @@ class TierFilterChips extends ConsumerWidget {
         ]) ...[
           _TierChip(
             tier: tier,
+            count: inView?.where((p) => p.tier == tier).length,
             selected: selected.contains(tier),
             onTap: () {
               final next = {...selected};
@@ -36,11 +38,13 @@ class TierFilterChips extends ConsumerWidget {
 class _TierChip extends StatelessWidget {
   const _TierChip({
     required this.tier,
+    required this.count,
     required this.selected,
     required this.onTap,
   });
 
   final ReportTier tier;
+  final int? count;
   final bool selected;
   final VoidCallback onTap;
 
@@ -49,7 +53,8 @@ class _TierChip extends StatelessWidget {
     return Semantics(
       button: true,
       selected: selected,
-      label: '${TierStyle.label(tier)} filter',
+      label:
+          '${TierStyle.label(tier)} filter${count == null ? '' : ', $count in view'}',
       child: GestureDetector(
         onTap: onTap,
         // Border width and content are constant across states so toggling
@@ -84,6 +89,29 @@ class _TierChip extends StatelessWidget {
                   color: selected ? TierStyle.textColor(tier) : KerbColors.ink600,
                 ),
               ),
+              if (count != null && count! > 0) ...[
+                const SizedBox(width: 6),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                  decoration: BoxDecoration(
+                    color: selected
+                        ? Colors.white.withValues(alpha: 0.75)
+                        : KerbColors.paper,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    '$count',
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w700,
+                      color: selected
+                          ? TierStyle.textColor(tier)
+                          : KerbColors.ink600,
+                    ),
+                  ),
+                ),
+              ],
             ],
           ),
         ),

@@ -8,24 +8,44 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'core/env.dart';
 import 'core/theme.dart';
+import 'features/map/map_providers.dart';
 import 'features/map/map_screen.dart';
 import 'features/my_reports/my_reports_screen.dart';
+
+/// Placeholder or missing Supabase config counts as unconfigured — boot on
+/// demo data instead of throwing before the first frame (white screen).
+bool get _supabaseConfigured =>
+    Env.supabaseUrl.startsWith('https://') &&
+    !Env.supabaseUrl.contains('YOUR-REF') &&
+    Env.supabaseAnonKey.isNotEmpty &&
+    Env.supabaseAnonKey != 'YOUR-ANON-KEY';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  if (!Env.useFake) {
-    await Supabase.initialize(
-      url: Env.supabaseUrl,
-      anonKey: Env.supabaseAnonKey,
-    );
-    // Anonymous auth: enough for RLS (role `authenticated`); device-scoped.
-    if (Supabase.instance.client.auth.currentSession == null) {
-      await Supabase.instance.client.auth.signInAnonymously();
+  var useFake = Env.useFake || !_supabaseConfigured;
+  if (!useFake) {
+    try {
+      await Supabase.initialize(
+        url: Env.supabaseUrl,
+        anonKey: Env.supabaseAnonKey,
+      );
+      // Anonymous auth: enough for RLS (role `authenticated`); device-scoped.
+      if (Supabase.instance.client.auth.currentSession == null) {
+        await Supabase.instance.client.auth.signInAnonymously();
+      }
+    } catch (e) {
+      // Unreachable backend / anonymous sign-ins disabled — demo data beats
+      // a blank page.
+      debugPrint('Supabase init failed, falling back to demo data: $e');
+      useFake = true;
     }
   }
 
-  runApp(const ProviderScope(child: AccessMapApp()));
+  runApp(ProviderScope(
+    overrides: [useFakeProvider.overrideWithValue(useFake)],
+    child: const AccessMapApp(),
+  ));
 }
 
 class AccessMapApp extends StatelessWidget {
@@ -39,21 +59,28 @@ class AccessMapApp extends StatelessWidget {
     return MaterialApp(
       title: 'AccessMap',
       theme: buildTheme(),
-      // Desktop trial runs inside a 9:19.5 phone frame so the mobile-first
-      // layout is seen as designed.
-      builder: !_isDesktop
+      // Wide-screen trials (Chrome / desktop) run inside a 9:19.5 phone frame
+      // so the mobile-first layout is seen as designed. Narrow windows and
+      // real phones get the app edge to edge.
+      builder: !_isDesktop && !kIsWeb
           ? null
-          : (context, child) => ColoredBox(
-                color: KerbColors.frame,
-                child: Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 412, maxHeight: 892),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(24),
-                      child: child!,
+          : (context, child) => LayoutBuilder(
+                builder: (context, constraints) {
+                  if (constraints.maxWidth < 700) return child!;
+                  return ColoredBox(
+                    color: KerbColors.frame,
+                    child: Center(
+                      child: ConstrainedBox(
+                        constraints:
+                            const BoxConstraints(maxWidth: 412, maxHeight: 892),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(24),
+                          child: child!,
+                        ),
+                      ),
                     ),
-                  ),
-                ),
+                  );
+                },
               ),
       home: const HomeShell(),
     );
