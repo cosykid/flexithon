@@ -32,6 +32,10 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   final _mapController = MapController();
   Timer? _debounce;
 
+  // Pin widgets cached per location: stable instances mean the fade-in
+  // plays once when a pin first appears, not on every viewport refetch.
+  final _pinCache = <String, TierMarker>{};
+
   @override
   void initState() {
     super.initState();
@@ -216,17 +220,25 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   }
 
   Marker _buildPin(MapPoint point) {
-    return TierMarker(
-      key: ValueKey(point.locationId),
-      point: point.position,
-      tier: point.tier,
-      child: Semantics(
-        button: true,
-        label:
-            '${point.name ?? 'Reported barrier'}, ${TierStyle.label(point.tier)}, ${point.reportCount} reports',
-        child: GestureDetector(
-          onTap: () => showReportDetailSheet(context, point),
-          child: KerbPin(tier: point.tier),
+    if (_pinCache.length > 800) _pinCache.clear();
+    final cacheKey =
+        '${point.locationId}:${point.tier.name}:${point.reportCount}';
+    return _pinCache.putIfAbsent(
+      cacheKey,
+      () => TierMarker(
+        key: ValueKey(point.locationId),
+        point: point.position,
+        tier: point.tier,
+        child: KerbFadeIn(
+          child: Semantics(
+            button: true,
+            label:
+                '${point.name ?? 'Reported barrier'}, ${TierStyle.label(point.tier)}, ${point.reportCount} reports',
+            child: GestureDetector(
+              onTap: () => showReportDetailSheet(context, point),
+              child: KerbPin(tier: point.tier),
+            ),
+          ),
         ),
       ),
     );
