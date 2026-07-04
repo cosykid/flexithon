@@ -9,7 +9,6 @@ import '../../core/platform.dart';
 import '../../core/theme.dart';
 import '../../models/venue.dart';
 import '../map/map_providers.dart';
-import '../map/map_style.dart';
 import '../map/marker_icons.dart';
 import 'new_report_controller.dart';
 import 'venue_search_page.dart';
@@ -369,7 +368,6 @@ class _MiniMapState extends State<_MiniMap> {
   Widget build(BuildContext context) {
     return GoogleMap(
       initialCameraPosition: CameraPosition(target: widget.position, zoom: 17),
-      style: kerbMapStyle,
       onMapCreated: (controller) => _controller = controller,
       onTap: _moved,
       markers: {

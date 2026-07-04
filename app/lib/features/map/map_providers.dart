@@ -52,12 +52,25 @@ final mapPointsRawProvider = FutureProvider<List<MapPoint>>((ref) async {
 });
 
 /// The raw viewport points narrowed to the active tier filter.
+///
+/// Refetches (pan/zoom) keep the previous points visible: the loading state
+/// carries the last data forward so markers never blink out mid-gesture —
+/// only `isLoading` flips for the spinner.
 final mapPointsProvider = Provider<AsyncValue<List<MapPoint>>>((ref) {
   final raw = ref.watch(mapPointsRawProvider);
   final filter = ref.watch(tierFilterProvider);
-  return raw.whenData(
-    (points) => points.where((p) => filter.contains(p.tier)).toList(),
+  final points = raw.valueOrNull;
+  if (points == null) {
+    return raw.whenData(
+      (p) => p.where((e) => filter.contains(e.tier)).toList(),
+    );
+  }
+  final filtered = AsyncData(
+    points.where((p) => filter.contains(p.tier)).toList(),
   );
+  return raw.isLoading
+      ? const AsyncValue<List<MapPoint>>.loading().copyWithPrevious(filtered)
+      : filtered;
 });
 
 final locationReportsProvider =
