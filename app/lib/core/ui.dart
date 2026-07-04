@@ -54,6 +54,7 @@ class KerbFloatingPill extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: KerbColors.line),
         boxShadow: KerbShadows.subtle,
       ),
       child: child,

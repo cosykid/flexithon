@@ -32,6 +32,19 @@
   <title>accessmap</title>
   <link rel="manifest" href="manifest.json">
 
+  <!-- Hide the Google Maps web UI chrome (keyboard shortcuts, "Map data",
+       Terms, Report a map error) along the bottom edge of the map. -->
+  <style>
+    .gm-style-cc,
+    .gm-fullscreen-control,
+    .gm-bundled-control,
+    gmp-internal-camera-control,
+    .gm-style button[title="Keyboard shortcuts"],
+    .gm-style [aria-label="Keyboard shortcuts"] {
+      display: none !important;
+    }
+  </style>
+
   <!-- Google Maps JavaScript API (required by google_maps_flutter on web).
        Replace YOUR_WEB_MAPS_API_KEY with a key that has "Maps JavaScript
        API" enabled and this origin allow-listed. -->

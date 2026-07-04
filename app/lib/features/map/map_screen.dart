@@ -10,12 +10,10 @@ import '../../core/platform.dart';
 import '../../core/theme.dart';
 import '../../core/ui.dart';
 import '../../models/map_point.dart';
-import '../new_report/new_report_flow.dart';
 import '../report_detail/report_detail_sheet.dart';
 import 'barriers_list_sheet.dart';
 import 'cluster.dart';
 import 'map_providers.dart';
-import 'map_style.dart';
 import 'marker_icons.dart';
 import 'tier_filter_chips.dart';
 
@@ -143,7 +141,6 @@ class _MapScreenState extends ConsumerState<MapScreen> {
           if (mapsSupported)
             GoogleMap(
               initialCameraPosition: _sydney,
-              style: kerbMapStyle,
               markers: _markers,
               myLocationEnabled: _myLocationEnabled,
               myLocationButtonEnabled: false,
@@ -151,8 +148,6 @@ class _MapScreenState extends ConsumerState<MapScreen> {
               mapToolbarEnabled: false,
               compassEnabled: false,
               tiltGesturesEnabled: false,
-              // Keeps the Google logo clear of the floating nav bar.
-              padding: const EdgeInsets.only(bottom: 88),
               onMapCreated: (controller) {
                 _controller = controller;
                 _scheduleViewportFetch();
@@ -170,85 +165,51 @@ class _MapScreenState extends ConsumerState<MapScreen> {
               caption: 'Google Maps has no desktop runtime — '
                   'run the trial in Chrome (flutter run -d chrome).',
             ),
-          // Top chrome: brand chip + tier filters, floating over the map.
-          SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      const _BrandChip(),
-                      if (ref.watch(useFakeProvider)) ...[
-                        const SizedBox(width: 8),
-                        const _DemoDataChip(),
-                      ],
-                      const Spacer(),
-                      IgnorePointer(
-                        child: AnimatedOpacity(
-                          opacity: points.isLoading ? 1 : 0,
-                          duration: const Duration(milliseconds: 200),
-                          child: const KerbFloatingPill(
-                            padding: EdgeInsets.all(10),
-                            child: SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: KerbColors.brand600,
-                              ),
-                            ),
+          // Top chrome: one slim row — barrier-list chip left, status +
+          // layers/filter dropdown right. No branding; the map owns the
+          // screen, Google Maps style.
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: SafeArea(
+              bottom: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: _InViewPill(
+                          points: points.valueOrNull ?? const [],
+                          onTap: () => showBarriersListSheet(
+                            context,
+                            points.valueOrNull ?? const [],
                           ),
                         ),
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  const TierFilterChips(),
-                  const SizedBox(height: 10),
-                  _InViewPill(
-                    points: points.valueOrNull ?? const [],
-                    onTap: () => showBarriersListSheet(
-                      context,
-                      points.valueOrNull ?? const [],
                     ),
-                  ),
-                ],
+                    if (ref.watch(useFakeProvider)) ...[
+                      const SizedBox(width: 8),
+                      const _DemoDataChip(),
+                    ],
+                    const SizedBox(width: 8),
+                    const TierFilterButton(),
+                  ],
+                ),
               ),
             ),
           ),
-          // Bottom-right action stack, kept above the floating nav bar.
+          // Reporting moved to the bottom nav, so the only control left on
+          // the map is my-location — nothing covers pins or attribution.
           Positioned(
-            right: 16,
-            bottom: 104,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                _RoundIconButton(
-                  icon: Icons.my_location_rounded,
-                  tooltip: 'My location',
-                  onTap: _goToMyLocation,
-                ),
-                const SizedBox(height: 12),
-                FloatingActionButton.extended(
-                  heroTag: 'report',
-                  icon: const Icon(Icons.add_a_photo_rounded),
-                  label: const Text('Report barrier'),
-                  onPressed: () async {
-                    final submitted = await Navigator.of(context).push<bool>(
-                      MaterialPageRoute(builder: (_) => const NewReportFlow()),
-                    );
-                    if (submitted == true && context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Report submitted — verifying with AI…'),
-                        ),
-                      );
-                    }
-                  },
-                ),
-              ],
+            right: 12,
+            bottom: 32,
+            child: _RoundIconButton(
+              icon: Icons.my_location_rounded,
+              tooltip: 'My location',
+              onTap: _goToMyLocation,
             ),
           ),
         ],
@@ -278,18 +239,18 @@ class _InViewPill extends StatelessWidget {
                 onTap: onTap,
                 child: KerbFloatingPill(
                   padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       const Icon(Icons.format_list_bulleted_rounded,
-                          size: 16, color: KerbColors.brand700),
+                          size: 16, color: KerbColors.brand600),
                       const SizedBox(width: 6),
                       Text(
                         '${points.length} barrier${points.length == 1 ? '' : 's'} in view',
                         style: const TextStyle(
                           fontSize: 13,
-                          fontWeight: FontWeight.w600,
+                          fontWeight: FontWeight.w500,
                           color: KerbColors.ink900,
                         ),
                       ),
@@ -314,46 +275,18 @@ class _DemoDataChip extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
+      decoration: const BoxDecoration(
         color: KerbColors.warnFill,
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: BorderRadius.all(Radius.circular(999)),
         boxShadow: KerbShadows.subtle,
       ),
       child: const Text(
-        'Demo data',
+        'Demo',
         style: TextStyle(
           fontSize: 12,
-          fontWeight: FontWeight.w700,
+          fontWeight: FontWeight.w600,
           color: KerbColors.warn,
         ),
-      ),
-    );
-  }
-}
-
-class _BrandChip extends StatelessWidget {
-  const _BrandChip();
-
-  @override
-  Widget build(BuildContext context) {
-    return KerbFloatingPill(
-      padding: const EdgeInsets.fromLTRB(8, 8, 16, 8),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 30,
-            height: 30,
-            decoration: const BoxDecoration(
-              color: KerbColors.brand600,
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(Icons.accessible_forward_rounded,
-                size: 18, color: Colors.white),
-          ),
-          const SizedBox(width: 8),
-          Text('AccessMap', style: kerbDisplay(size: 16)),
-        ],
       ),
     );
   }
@@ -378,15 +311,15 @@ class _RoundIconButton extends StatelessWidget {
         color: Colors.white,
         shape: const CircleBorder(),
         elevation: 2,
-        shadowColor: const Color(0x2210222A),
+        shadowColor: const Color(0x33202124),
         child: InkWell(
           customBorder: const CircleBorder(),
           onTap: onTap,
           child: Container(
-            width: 52,
-            height: 52,
+            width: 48,
+            height: 48,
             alignment: Alignment.center,
-            child: Icon(icon, size: 22, color: KerbColors.ink900),
+            child: Icon(icon, size: 22, color: KerbColors.ink600),
           ),
         ),
       ),
