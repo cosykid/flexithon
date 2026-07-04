@@ -125,20 +125,20 @@ class NewReportController extends StateNotifier<NewReportState> {
   void setDescription(String description) =>
       state = state.copyWith(description: description);
 
-  Future<bool> submit() async {
-    if (!state.canSubmit) return false;
+  /// Returns the new report id on success, null on failure.
+  Future<String?> submit() async {
+    if (!state.canSubmit) return null;
     state = state.copyWith(submitting: true, clearError: true);
     try {
-      await _repo.submitReport(ReportDraft(
+      return await _repo.submitReport(ReportDraft(
         photoBytes: state.photoBytes,
         position: state.position!,
         venue: state.venue,
         description: state.description.trim(),
       ));
-      return true;
     } catch (e) {
       state = state.copyWith(submitting: false, error: 'Submit failed: $e');
-      return false;
+      return null;
     }
   }
 }
