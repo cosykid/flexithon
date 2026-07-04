@@ -9,6 +9,59 @@ online, and classifies the report. Verified reports appear as clustered pins on 
 
 | Tier | Meaning | On map |
 |---|---|---|
+| `web_search` | Tavily | Search for the venue's accessibility online; returns title/URL/snippet results |
+| `get_place_accessibility` | Google Places (New) | Read the venue's own `accessibilityOptions.wheelchairAccessibleEntrance` claim |
+| `submit_verdict` | (terminal) | Report facts: does the image confirm the barrier, barrier type, venue claim, corroboration, contradiction, confidence, reasoning, and a source link per verified claim |
+
+Guardrails: a **60-second deadline** and **5-iteration cap**; a **vision-less fallback** that retries once without the image on HTTP 400 (so text-only endpoints degrade to *unsubstantiated* rather than hanging); and on any thrown error the report is left `pending` with `retry_count` incremented, so the sweep can retry up to 3 times.
+
+The Google Places claim is treated as **ground truth** — whatever `wheelchairAccessibleEntrance` returns overrides the model's echoed value. For untagged reports (no `place_id`, so the Places tool can't fire), the function falls back to a `venue_claims_accessible` value cached on the location from earlier reports or seed data.
+
+### 3. Deterministic classification
+
+`classify.ts` maps the verdict's facts to a `{status, tier}` with these rules, in order:
+
+1. Photo **contradicts** the report (or is unrelated/spam) → `rejected`.
+2. No **confirming** photo (`image_confirms_barrier !== true`, i.e. false *or* null) → `classified` / **unsubstantiated**. A confirming photo is the prerequisite for any map-visible tier.
+3. Photo confirms **and** the venue claims accessible → `classified` / **partially substantiated** (conflicting evidence).
+4. Photo confirms **and** the venue is silent or admits inaccessibility → `classified` / **substantiated**.
+
+`web_corroboration_found` (stored in its own boolean column) and `confidence` (stored inside the `ai_reasoning` JSON) are recorded but do **not** affect the tier. The full reasoning trail — model name, reasoning text, confidence, and the log of tool calls — is stored in `ai_reasoning` on the report for display in the detail sheet.
+
+Every verified claim carries a citation back to where the information was found, so users can independently check the source. The model must cite `{url, title, claim}` entries in `submit_verdict`; the server only keeps URLs that actually appeared in a tool result during that run (web-search results or the venue's Google Maps link), so a hallucinated link can never reach the database. Because the Places claim is ground truth, its Google Maps link is attached automatically whenever the tool fired — even if the model forgot to cite it. Sanitized citations are stored as rows in the **`report_sources`** table; the app lists their titles alongside the AI summary but fetches the destination URL from Supabase only when the user taps a link.
+
+### 4. Rollup & auto-promotion (Postgres trigger)
+
+The per-location rollup lives in the database, not the edge function, so it stays atomic under concurrent classifications and also fires for seed data. On every `reports` insert or update of `tier`/`status`, `refresh_location_rollup` recomputes the affected location's counts (over **classified** reports only) and sets `effective_tier`:
+
+- `substantiated` if there's ≥1 substantiated report **or** ≥5 partial reports (`PROMOTION_THRESHOLD = 5`);
+- `partially_substantiated` if 1–4 partials and no substantiated;
+- `null` otherwise (no classified evidence → invisible on the map).
+
+### 5. Rendering pins
+
+The map (`flutter_map` + `flutter_map_marker_cluster`) fetches only the visible viewport. Map movement is debounced 300 ms and written into a structural-equality `Bbox` record; `points_in_bbox` returns up to 500 locations with a non-null `effective_tier` inside the envelope. Pins are tier-coloured pucks with a notch that lands on the exact point; clusters draw a white circle with a proportional ring — red for the substantiated fraction, amber for everything else.
+
+## Data model
+
+Two tables: individual **`reports`** roll up into **`locations`** (the map pins). Clients never write counts or tiers directly — those flow only through the `SECURITY DEFINER` trigger and the service role.
+
+### Tables
+
+**`locations`** — one row per place, one map pin.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | uuid PK | |
+| `geog` | `geography(point,4326)` | WGS84; GIST-indexed |
+| `place_ref` | text UNIQUE | Google `place_id`, null for untagged spots |
+| `name`, `address` | text | |
+| `venue_claims_accessible` | boolean | cached from Google Places, used as a fallback for untagged reports |
+| `partial_count`, `substantiated_count` | int | maintained by the trigger |
+| `effective_tier` | `report_tier` | pin colour source; null hides the pin |
+| `created_at` | timestamptz | |
+
+**`reports`** — one crowdsourced observation.
 | Unsubstantiated | Description only — no confirming photo, no online corroboration | No |
 | Partially substantiated (amber) | Photo confirms the barrier, but the venue claims accessibility online | Yes |
 | Substantiated (red) | Photo confirms the barrier and the venue claims nothing / inaccessibility — or ≥5 partial reports at one location (auto-promoted) | Yes |
@@ -17,6 +70,20 @@ The AI reports facts (what the photo shows, what the venue claims); the tier rul
 are deterministic code (`supabase/functions/classify-report/classify.ts` + the
 rollup trigger in `supabase/migrations/004_trigger.sql`).
 
+**`report_sources`** — one row per source link the AI verifier cited (migration `005_sources.sql`).
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | uuid PK | |
+| `report_id` | uuid → `reports` | cascade delete |
+| `url` | text NOT NULL | fetched by the app at click time, never in list queries |
+| `title`, `claim` | text | display label and which verified claim the link supports |
+| `position` | int | citation order from the verdict |
+| `created_at` | timestamptz | |
+
+RLS mirrors the parent report's visibility (own reports, or classified partial/substantiated); only the service role writes rows.
+
+**Enums**: `report_tier` = `unsubstantiated | partially_substantiated | substantiated` (the `unsubstantiated` value exists but the pipeline leaves `effective_tier` null instead); `report_status` = `pending | classified | rejected`.
 ## Stack
 
 - **Flutter** — `google_maps_flutter` (custom canvas-drawn pins + zoom-based clustering), Riverpod, `supabase_flutter`
@@ -47,14 +114,53 @@ Dashboard steps:
 
 ### 2. Edge function
 
-```bash
-supabase secrets set \
-  AI_BASE_URL=https://api.openai.com/v1 \
-  AI_API_KEY=sk-... \
-  AI_MODEL=gpt-4o-mini \
-  TAVILY_API_KEY=tvly-... \
-  GOOGLE_PLACES_KEY=AIza...
-supabase functions deploy classify-report
+```
+flexithon/
+├─ README.md
+├─ SETUP.md                     ← full go-live walkthrough (start here to run it)
+├─ app/                         Flutter client ("accessmap")
+│  ├─ pubspec.yaml
+│  ├─ android/ ios/ web/        committed platform targets (permissions already wired)
+│  ├─ macos/ windows/ linux/    committed desktop targets
+│  ├─ run.example.sh            copy → run.sh, fill keys, launch
+│  ├─ test/
+│  └─ lib/
+│     ├─ main.dart              bootstrap: Supabase init + anon auth, Riverpod scope,
+│     │                         MaterialApp, two-tab shell, desktop phone-frame
+│     ├─ core/
+│     │  ├─ env.dart            compile-time --dart-define config (+ USE_FAKE)
+│     │  ├─ supabase.dart       global `supa` client getter
+│     │  ├─ theme.dart          "Kerb" design system: colours, type, TierStyle
+│     │  └─ ui.dart             shared widgets: tiles, pins, clusters, badges
+│     ├─ models/
+│     │  ├─ venue.dart          Venue (+ fromPlacesJson)
+│     │  ├─ map_point.dart      one points_in_bbox row
+│     │  └─ report.dart         Report + ReportTier/ReportStatus enums
+│     ├─ data/
+│     │  ├─ reports_repository.dart          abstract interface + ReportDraft
+│     │  ├─ supabase_reports_repository.dart real backend (RPCs, storage, edge fn)
+│     │  ├─ fake_reports_repository.dart     in-memory demo backend
+│     │  └─ places_api.dart                  Google Places (New) Text Search
+│     └─ features/
+│        ├─ map/                map_providers.dart, map_screen.dart, tier_filter_chips.dart
+│        ├─ new_report/         new_report_controller.dart, new_report_flow.dart, venue_search_page.dart
+│        ├─ report_detail/      report_detail_sheet.dart
+│        └─ my_reports/         my_reports_screen.dart
+└─ supabase/
+   ├─ migrations/
+   │  ├─ 001_schema.sql         PostGIS, enums, locations + reports, indexes
+   │  ├─ 002_rls.sql            RLS + storage.objects policies
+   │  ├─ 003_rpc.sql            points_in_bbox, upsert_location
+   │  ├─ 004_trigger.sql        refresh_location_rollup + reports_rollup trigger
+   │  └─ 005_sources.sql        report_sources (per-claim citation links) + RLS
+   ├─ functions/classify-report/   Deno AI verification pipeline
+   │  ├─ index.ts               HTTP entry: dispatch, load, classify, write, retry
+   │  ├─ aiClient.ts            OpenAI-compatible vision + tool-use loop
+   │  ├─ tools.ts               web_search / get_place_accessibility / submit_verdict
+   │  ├─ classify.ts            deterministic Verdict → {status, tier}
+   │  ├─ geo.ts                 EWKB/GeoJSON PostGIS point parsing
+   │  └─ classify_test.ts       Deno unit tests (no keys needed)
+   └─ seed.sql                  ~31 Sydney locations / ~47 reports + Rosie's Cafe prop
 ```
 
 The model must support **vision and tool calling**. Test both on day 1:
@@ -62,9 +168,16 @@ The model must support **vision and tool calling**. Test both on day 1:
 
 Unit tests for the tier rules and geometry parsing (no keys needed):
 
-```bash
-cd supabase/functions/classify-report && deno test classify_test.ts
-```
+The app is mobile-first and portrait-first, built around a two-tab shell (**Map** and **My reports**) with a custom floating pill nav bar; the map runs edge-to-edge beneath it. It isn't orientation-locked — mobile devices are free to rotate (the iOS plist permits landscape). Only the desktop build is constrained: on non-web Linux/macOS/Windows the whole app renders inside a fixed 412×892 rounded phone frame so the mobile layout displays as designed. There is a single light theme — the **"Kerb"** design system (named after the kerb cut): warm paper surfaces, deep petrol ink, a teal brand, Sora display + Inter body fonts, Material 3, and 56 dp touch targets.
+
+### Screens
+
+- **Map** — `flutter_map` with a Stadia/CARTO basemap, viewport-debounced fetching, tier-coloured clustered pins, a my-location button, a *Report barrier* FAB, and tier filter chips for the two visible tiers. Tapping a pin opens the report-detail sheet.
+- **New report** — the four-step flow (photo, location mini-map you can tap to fine-tune, optional venue search, description) with a sticky submit bar. On success it invalidates the map and My Reports providers so both refresh.
+- **Report detail** — a draggable bottom sheet showing a location's **classified** reports: tier badge, report count, per-report photo (via 1-hour signed URLs), a barrier-type tag, date, description, and an expandable AI-verification summary with tappable **source links** — each verified claim cites the page or Google Maps listing where the information was found. Partially-substantiated locations get a "venue claims accessible online, but photos say otherwise" callout.
+- **My reports** — your own submissions (any status) with pull-to-refresh; status-driven cards — pending shows *Verifying…* with an hourglass, rejected shows a block icon, classified adopts the tier's colour/icon/label.
+
+### Repository abstraction & the USE_FAKE parachute
 
 If a report gets stuck pending (app killed mid-submit, endpoint down), sweep:
 

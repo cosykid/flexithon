@@ -1,5 +1,5 @@
 // Run: deno test classify_test.ts
-import { classify, type Verdict } from "./classify.ts";
+import { classify, sanitizeSources, type Verdict } from "./classify.ts";
 import { parsePoint } from "./geo.ts";
 
 function assertEq(actual: unknown, expected: unknown, msg: string) {
@@ -17,6 +17,7 @@ function verdict(v: Partial<Verdict>): Verdict {
     image_contradicts_report: false,
     confidence: "high",
     reasoning: "",
+    sources: [],
     ...v,
   };
 }
@@ -51,6 +52,48 @@ Deno.test("tier rules", () => {
     classify(verdict({ image_confirms_barrier: true, venue_claims_accessible: false })),
     { status: "classified", tier: "substantiated" },
     "image, venue admits inaccessible",
+  );
+});
+
+Deno.test("source sanitization", () => {
+  const seen = new Set([
+    "https://example.com/a",
+    "https://maps.google.com/place",
+  ]);
+
+  assertEq(
+    sanitizeSources(
+      [
+        { url: "https://example.com/a", title: "A", claim: "venue has stairs" },
+        { url: "https://hallucinated.example/b", title: "B", claim: "made up" },
+      ],
+      seen,
+    ),
+    [{ url: "https://example.com/a", title: "A", claim: "venue has stairs" }],
+    "hallucinated URLs are dropped",
+  );
+
+  assertEq(
+    sanitizeSources(
+      [
+        { url: "https://example.com/a" },
+        { url: "https://example.com/a", title: "dup" },
+        { url: "https://maps.google.com/place", title: 42, claim: null },
+      ],
+      seen,
+    ),
+    [
+      { url: "https://example.com/a", title: null, claim: null },
+      { url: "https://maps.google.com/place", title: null, claim: null },
+    ],
+    "dedupes and normalizes non-string fields",
+  );
+
+  assertEq(sanitizeSources("not an array", seen), [], "non-array degrades to empty");
+  assertEq(
+    sanitizeSources([null, 7, { title: "no url" }], seen),
+    [],
+    "malformed entries are dropped",
   );
 });
 

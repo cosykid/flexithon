@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "feat/**", "fix/**"]
+  pull_request:
+
+jobs:
+  flutter:
+    name: Flutter analyze & test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter analyze
+      - run: flutter test
+
+  edge-function:
+    name: Edge function check & test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: supabase/functions/classify-report
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - run: deno lint .
+      # index.ts is excluded from `deno check`: its jsr:@supabase/supabase-js
+      # import pulls npm dependencies that Deno 2 only type-checks against a
+      # local node_modules; Supabase's own deploy bundler validates index.ts.
+      - run: deno check aiClient.ts tools.ts classify.ts geo.ts classify_test.ts
+      - run: deno test classify_test.ts

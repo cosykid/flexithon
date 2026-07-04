@@ -2,6 +2,9 @@
 // Invoke with {"report_id": "<uuid>"} right after a report is inserted, or
 // {"sweep": true} to retry all pending reports older than 2 minutes.
 
+// Inline jsr: import is the standard pattern for Supabase edge functions
+// deployed without a deno.json.
+// deno-lint-ignore no-import-prefix
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { runVerification } from "./aiClient.ts";
 import { classify } from "./classify.ts";
@@ -98,6 +101,24 @@ async function processReport(reportId: string): Promise<{ ok: boolean; detail: s
       })
       .eq("id", reportId);
     if (updateErr) return { ok: false, detail: `update failed: ${updateErr.message}` };
+
+    // Source links live in their own table; the app fetches the URL from
+    // there at click time. Replace-then-insert keeps retries idempotent.
+    if (verdict.sources.length > 0) {
+      await supa.from("report_sources").delete().eq("report_id", reportId);
+      const { error: srcErr } = await supa.from("report_sources").insert(
+        verdict.sources.map((s, i) => ({
+          report_id: reportId,
+          url: s.url,
+          title: s.title,
+          claim: s.claim,
+          position: i,
+        })),
+      );
+      // Non-fatal: the verdict is already committed; a report without
+      // citations is still valid.
+      if (srcErr) console.error(`report_sources insert failed: ${srcErr.message}`);
+    }
 
     if (report.locations && verdict.venue_claims_accessible !== null) {
       await supa

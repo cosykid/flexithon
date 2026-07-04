@@ -41,4 +41,8 @@ abstract class ReportsRepository {
 
   /// Display URL for a report photo (signed URL for the private bucket).
   Future<String?> photoUrl(String? photoPath);
+
+  /// The destination URL for an AI-verification source link, resolved at
+  /// click time (fetched from the report_sources table on the backend).
+  Future<String?> sourceUrl(AiSource source);
 }

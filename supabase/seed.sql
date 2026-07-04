@@ -30,6 +30,7 @@ do $$
 declare
   seed_user uuid := '00000000-0000-0000-0000-000000000001';
   loc uuid;
+  rep uuid;
   r record;
   i int;
 begin
@@ -102,7 +103,22 @@ begin
           'reasoning', 'Seed data: photo clearly shows the reported barrier.',
           'tool_calls', '[]'::jsonb
         )
-      );
+      )
+      returning id into rep;
+
+      -- Partial-tier seeds cite the venue claim they conflict with, so the
+      -- detail sheet's source links have something to show in demos.
+      if r.tier = 'partial' then
+        insert into report_sources (report_id, url, title, claim, position)
+        values (
+          rep,
+          'https://www.google.com/maps/search/?api=1&query='
+            || replace(r.name, ' ', '+'),
+          r.name || ' on Google Maps',
+          'Venue claims wheelchair accessibility on Google Maps',
+          0
+        );
+      end if;
     end loop;
   end loop;
 
@@ -130,6 +146,16 @@ begin
         'reasoning', 'Photo shows front-door steps, but the venue claims wheelchair accessibility online.',
         'tool_calls', '[]'::jsonb
       )
+    )
+    returning id into rep;
+
+    insert into report_sources (report_id, url, title, claim, position)
+    values (
+      rep,
+      'https://www.google.com/maps/search/?api=1&query=Rosie''s+Cafe+Kingsford',
+      'Rosie''s Cafe on Google Maps',
+      'Venue claims wheelchair accessibility on Google Maps',
+      0
     );
   end loop;
 end $$;

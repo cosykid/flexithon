@@ -21,11 +21,16 @@ class SupabaseReportsRepository implements ReportsRepository {
         .toList();
   }
 
+  // Source links are joined without their URLs: the URL is looked up in
+  // report_sources only when the user actually taps a link (sourceUrl).
+  static const _reportSelect =
+      '*, locations(name), report_sources(id, title, claim, position)';
+
   @override
   Future<List<Report>> fetchLocationReports(String locationId) async {
     final rows = await supa
         .from('reports')
-        .select('*, locations(name)')
+        .select(_reportSelect)
         .eq('location_id', locationId)
         .eq('status', 'classified')
         .order('created_at', ascending: false);
@@ -37,7 +42,7 @@ class SupabaseReportsRepository implements ReportsRepository {
     final uid = supa.auth.currentUser!.id;
     final rows = await supa
         .from('reports')
-        .select('*, locations(name)')
+        .select(_reportSelect)
         .eq('user_id', uid)
         .order('created_at', ascending: false);
     return rows.map(Report.fromJson).toList();
@@ -92,7 +97,7 @@ class SupabaseReportsRepository implements ReportsRepository {
   Future<Report?> fetchReport(String reportId) async {
     final row = await supa
         .from('reports')
-        .select('*, locations(name)')
+        .select(_reportSelect)
         .eq('id', reportId)
         .maybeSingle();
     return row == null ? null : Report.fromJson(row);
@@ -102,5 +107,15 @@ class SupabaseReportsRepository implements ReportsRepository {
   Future<String?> photoUrl(String? photoPath) async {
     if (photoPath == null) return null;
     return supa.storage.from('report-photos').createSignedUrl(photoPath, 3600);
+  }
+
+  @override
+  Future<String?> sourceUrl(AiSource source) async {
+    final row = await supa
+        .from('report_sources')
+        .select('url')
+        .eq('id', source.id)
+        .maybeSingle();
+    return row?['url'] as String?;
   }
 }

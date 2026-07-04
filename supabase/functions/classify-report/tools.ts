@@ -68,6 +68,31 @@ export const toolDefinitions = [
           },
           confidence: { type: "string", enum: ["low", "medium", "high"] },
           reasoning: { type: "string" },
+          sources: {
+            type: "array",
+            description:
+              "One entry per verified claim, linking to where the information was found. " +
+              "Only cite URLs that appeared in tool results this run (web_search results or " +
+              "the maps_url from get_place_accessibility). Empty if no tools were used.",
+            items: {
+              type: "object",
+              properties: {
+                url: {
+                  type: "string",
+                  description: "Exact URL from a tool result",
+                },
+                title: {
+                  type: ["string", "null"],
+                  description: "Page or place title",
+                },
+                claim: {
+                  type: ["string", "null"],
+                  description: "Which verified claim this source supports",
+                },
+              },
+              required: ["url"],
+            },
+          },
         },
         required: [
           "web_corroboration_found",
@@ -80,8 +105,14 @@ export const toolDefinitions = [
   },
 ];
 
-export async function webSearch(query: string): Promise<string> {
-  if (!TAVILY_API_KEY) return JSON.stringify({ error: "search unavailable" });
+// `urls` feeds the citation allowlist: the model may only cite URLs that
+// actually came back from a tool during this run.
+export async function webSearch(
+  query: string,
+): Promise<{ raw: string; urls: string[] }> {
+  if (!TAVILY_API_KEY) {
+    return { raw: JSON.stringify({ error: "search unavailable" }), urls: [] };
+  }
   const res = await fetch("https://api.tavily.com/search", {
     method: "POST",
     headers: {
@@ -95,7 +126,9 @@ export async function webSearch(query: string): Promise<string> {
       max_results: 5,
     }),
   });
-  if (!res.ok) return JSON.stringify({ error: `search failed: ${res.status}` });
+  if (!res.ok) {
+    return { raw: JSON.stringify({ error: `search failed: ${res.status}` }), urls: [] };
+  }
   const data = await res.json();
   const results = (data.results ?? []).map(
     (r: { title: string; url: string; content: string }) => ({
@@ -104,16 +137,25 @@ export async function webSearch(query: string): Promise<string> {
       snippet: r.content?.slice(0, 500),
     }),
   );
-  return JSON.stringify({ results });
+  return {
+    raw: JSON.stringify({ results }),
+    urls: results.map((r: { url: string }) => r.url).filter(Boolean),
+  };
+}
+
+// Stable public link to the venue's Google Maps listing, where the
+// accessibility claim can be checked by hand.
+export function placeMapsUrl(placeId: string): string {
+  return `https://www.google.com/maps/place/?q=place_id:${encodeURIComponent(placeId)}`;
 }
 
 // Returns the venue's accessibility claim deterministically. The caller keeps
 // this raw value and trusts it over the model's echo in the verdict.
 export async function getPlaceAccessibility(
   placeId: string,
-): Promise<{ raw: string; claim: boolean | null }> {
+): Promise<{ raw: string; claim: boolean | null; url: string | null }> {
   if (!GOOGLE_PLACES_KEY) {
-    return { raw: JSON.stringify({ error: "places unavailable" }), claim: null };
+    return { raw: JSON.stringify({ error: "places unavailable" }), claim: null, url: null };
   }
   const res = await fetch(
     `https://places.googleapis.com/v1/places/${encodeURIComponent(placeId)}`,
@@ -126,17 +168,24 @@ export async function getPlaceAccessibility(
     },
   );
   if (!res.ok) {
-    return { raw: JSON.stringify({ error: `places failed: ${res.status}` }), claim: null };
+    return {
+      raw: JSON.stringify({ error: `places failed: ${res.status}` }),
+      claim: null,
+      url: null,
+    };
   }
   const data = await res.json();
   const entrance = data.accessibilityOptions?.wheelchairAccessibleEntrance;
   const claim = typeof entrance === "boolean" ? entrance : null;
+  const url = placeMapsUrl(placeId);
   return {
     raw: JSON.stringify({
       venue: data.displayName?.text ?? null,
       wheelchair_accessible_entrance: claim,
       accessibility_options: data.accessibilityOptions ?? null,
+      maps_url: url,
     }),
     claim,
+    url,
   };
 }

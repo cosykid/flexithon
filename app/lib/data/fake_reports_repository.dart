@@ -58,6 +58,22 @@ class FakeReportsRepository implements ReportsRepository {
         webCorroborationFound: point.tier == ReportTier.substantiated,
         aiReasoning:
             'The photo clearly shows a stepped entrance with no ramp in frame.',
+        aiSources: [
+          if (point.tier == ReportTier.partiallySubstantiated)
+            const AiSource(
+              id: 'fake-src-maps',
+              title: 'Google Maps listing',
+              claim: 'Venue claims wheelchair accessibility on Google Maps',
+              url: 'https://www.google.com/maps/place/?q=place_id:demo',
+            ),
+          if (point.tier == ReportTier.substantiated)
+            const AiSource(
+              id: 'fake-src-review',
+              title: 'Local accessibility review',
+              claim: 'Review mentions stepped entrance with no ramp',
+              url: 'https://example.com/accessibility-review',
+            ),
+        ],
         createdAt: DateTime.now().subtract(Duration(days: i * 3)),
       ),
     );
@@ -112,4 +128,7 @@ class FakeReportsRepository implements ReportsRepository {
 
   @override
   Future<String?> photoUrl(String? photoPath) async => null;
+
+  @override
+  Future<String?> sourceUrl(AiSource source) async => source.url;
 }

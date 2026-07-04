@@ -2,6 +2,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/theme.dart';
 import '../../core/ui.dart';
@@ -191,7 +192,10 @@ class _ReportCard extends ConsumerWidget {
                 Text(report.description),
                 if (report.aiReasoning != null) ...[
                   const SizedBox(height: 12),
-                  _AiSummary(text: report.aiReasoning!),
+                  _AiSummary(
+                    text: report.aiReasoning!,
+                    sources: report.aiSources,
+                  ),
                 ],
               ],
             ),
@@ -245,9 +249,10 @@ class _BarrierTag extends StatelessWidget {
 
 /// Collapsed AI verification note; expands on tap.
 class _AiSummary extends StatefulWidget {
-  const _AiSummary({required this.text});
+  const _AiSummary({required this.text, this.sources = const []});
 
   final String text;
+  final List<AiSource> sources;
 
   @override
   State<_AiSummary> createState() => _AiSummaryState();
@@ -301,7 +306,93 @@ class _AiSummaryState extends State<_AiSummary> {
                   color: KerbColors.ink900,
                 ),
               ),
+              if (widget.sources.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                Text(
+                  'Sources',
+                  style: kerbDisplay(
+                    size: 11.5,
+                    weight: FontWeight.w600,
+                    color: KerbColors.brand700,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                ...widget.sources.map((s) => _SourceLink(source: s)),
+              ],
             ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// One verified-claim citation. The URL is fetched from the backend at tap
+/// time (report_sources table), then opened in the browser.
+class _SourceLink extends ConsumerWidget {
+  const _SourceLink({required this.source});
+
+  final AiSource source;
+
+  String get _label =>
+      (source.title != null && source.title!.isNotEmpty)
+          ? source.title!
+          : 'Source link';
+
+  Future<void> _open(BuildContext context, WidgetRef ref) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final url = await ref.read(repositoryProvider).sourceUrl(source);
+    final uri = url == null ? null : Uri.tryParse(url);
+    final opened = uri != null &&
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!opened) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Could not open this source link.')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return InkWell(
+      onTap: () => _open(context, ref),
+      borderRadius: BorderRadius.circular(KerbRadius.sm),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 5),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Padding(
+              padding: EdgeInsets.only(top: 2),
+              child: Icon(Icons.link_rounded, size: 14, color: KerbColors.brand700),
+            ),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _label,
+                    style: const TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
+                      color: KerbColors.brand700,
+                      decoration: TextDecoration.underline,
+                      decorationColor: KerbColors.brand700,
+                    ),
+                  ),
+                  if (source.claim != null && source.claim!.isNotEmpty)
+                    Text(
+                      source.claim!,
+                      style: const TextStyle(
+                        fontSize: 11.5,
+                        height: 1.35,
+                        color: KerbColors.ink600,
+                      ),
+                    ),
+                ],
+              ),
+            ),
           ],
         ),
       ),
