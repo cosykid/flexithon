@@ -41,13 +41,13 @@ class _MapLocationSearchState extends State<MapLocationSearch>
 
   late final AnimationController _anim = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 280),
-    reverseDuration: const Duration(milliseconds: 220),
+    duration: const Duration(milliseconds: 300),
+    reverseDuration: const Duration(milliseconds: 260),
   );
   late final Animation<double> _curve = CurvedAnimation(
     parent: _anim,
     curve: Curves.easeOutCubic,
-    reverseCurve: Curves.easeInCubic,
+    reverseCurve: Curves.easeInOutCubic,
   );
 
   bool _open = false;
@@ -56,12 +56,33 @@ class _MapLocationSearchState extends State<MapLocationSearch>
   List<Venue> _results = [];
 
   @override
+  void initState() {
+    super.initState();
+    // Clear the query/results only once the collapse tween has finished, so
+    // the results panel slides up populated instead of popping empty.
+    _anim.addStatusListener((status) {
+      if (status == AnimationStatus.dismissed) _resetSearch();
+    });
+  }
+
+  @override
   void dispose() {
     _debounce?.cancel();
     _anim.dispose();
     _controller.dispose();
     _focusNode.dispose();
     super.dispose();
+  }
+
+  void _resetSearch() {
+    _debounce?.cancel();
+    _controller.clear();
+    if (!mounted) return;
+    setState(() {
+      _results = [];
+      _searched = false;
+      _loading = false;
+    });
   }
 
   void _setOpen(bool open) {
@@ -75,11 +96,7 @@ class _MapLocationSearchState extends State<MapLocationSearch>
     } else {
       _anim.reverse();
       _focusNode.unfocus();
-      _controller.clear();
-      _results = [];
-      _searched = false;
-      _loading = false;
-      _debounce?.cancel();
+      // Query/results stay put until the tween ends — see the status listener.
     }
   }
 
@@ -164,29 +181,24 @@ class _MapLocationSearchState extends State<MapLocationSearch>
         builder: (context, constraints) {
           final full = constraints.maxWidth;
           final width = _buttonSize + (full - _buttonSize) * t;
-          final buttonOpacity = (1 - t / 0.4).clamp(0.0, 1.0);
-          final fieldOpacity = ((t - 0.3) / 0.7).clamp(0.0, 1.0);
           return Stack(
             children: [
-              // Collapsed layer: search button + in-view pill, fades out first.
+              // Collapsed row (button + in-view pill) sits underneath. The
+              // opaque pill wipes across it as it grows, so there is no opacity
+              // animated over the text field — that flickers on web.
               Positioned.fill(
                 child: IgnorePointer(
                   ignoring: _open,
-                  child: Opacity(
-                    opacity: buttonOpacity,
-                    child: _buildClosedRow(),
-                  ),
+                  child: _buildClosedRow(),
                 ),
               ),
-              // Expanded layer: the pill grows left→right; content is laid out
-              // at full width and clipped, so no overflow mid-animation.
+              // Expanded pill grows left→right from the button's footprint.
+              // Content is laid out at full width and clipped, so nothing
+              // overflows mid-tween.
               if (t > 0)
                 IgnorePointer(
                   ignoring: !_open,
-                  child: Opacity(
-                    opacity: fieldOpacity,
-                    child: _buildSearchField(width, full),
-                  ),
+                  child: _buildSearchField(width, full),
                 ),
             ],
           );
