@@ -444,14 +444,14 @@ class ReportPipelineSummaryCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
+          const Row(
             children: [
-              const Icon(Icons.route_rounded, size: 18, color: KerbColors.brand700),
-              const SizedBox(width: 8),
+              Icon(Icons.route_rounded, size: 18, color: KerbColors.brand700),
+              SizedBox(width: 8),
               Expanded(
                 child: Text(
                   'Summary',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontWeight: FontWeight.w700,
                     color: KerbColors.brand700,
                   ),
