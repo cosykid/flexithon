@@ -8,8 +8,8 @@ repo root unless stated otherwise.
 | Destination | Keys | Set via |
 |---|---|---|
 | **Server** (edge function) | `AI_BASE_URL`, `AI_API_KEY`, `AI_MODEL`, `TAVILY_API_KEY`, `GOOGLE_PLACES_KEY` | `supabase secrets set` (§5) |
-| **App** (client) | `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `GOOGLE_PLACES_KEY` | `--dart-define` on `flutter run` (§7) |
-| **App** (platform config) | Google Maps SDK key | Android: `MAPS_API_KEY` env var / gradle property · iOS: `GMSApiKey` in `ios/Runner/Info.plist` · Web: `<script>` tag in `web/index.html` |
+| **App** (client) | `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `GOOGLE_PLACES_KEY`, `GOOGLE_MAPS_WEB_KEY` (web builds) | `--dart-define` on `flutter run` (§7) |
+| **App** (platform config) | Google Maps SDK key | Android: `MAPS_API_KEY` env var / gradle property · iOS: `GMSApiKey` in `ios/Runner/Info.plist` |
 
 `GOOGLE_PLACES_KEY` appears in both: server uses it for the verifier's
 `get_place_accessibility` tool, app uses it for venue-tagging search.
@@ -19,9 +19,23 @@ The Maps SDK key can be the same GCP key with the Maps SDKs enabled.
 
 ## 0. Install Supabase CLI (one-time)
 
+macOS:
+
+```bash
+brew install supabase/tap/supabase
+```
+
+WSL / Debian-based Linux:
+
 ```bash
 curl -L https://github.com/supabase/cli/releases/latest/download/supabase_linux_amd64.deb -o /tmp/supabase.deb
 sudo dpkg -i /tmp/supabase.deb
+```
+
+Either platform, no install (works anywhere Node is): prefix every
+`supabase` command below with `npx`, e.g. `npx supabase login`.
+
+```bash
 supabase --version
 ```
 
@@ -41,7 +55,7 @@ supabase --version
 ```bash
 supabase login
 supabase link --project-ref <ref>       # <ref> from the project URL
-supabase db push                        # migrations 001-004
+supabase db push                        # all migrations in supabase/migrations/
 ```
 
 If push prints `storage.objects policies skipped`: dashboard → Storage →
@@ -75,6 +89,10 @@ supabase functions deploy classify-report
 
 OpenRouter instead of OpenAI: `AI_BASE_URL=https://openrouter.ai/api/v1`,
 `AI_MODEL=openai/gpt-4o-mini`, `AI_API_KEY=sk-or-...`.
+
+NanoGPT: `AI_BASE_URL=https://nano-gpt.com/api/v1` (the `/api/v1` suffix is
+required — the bare domain serves HTML 404s), `AI_MODEL=alibaba/qwen3.6-27b`
+(vision + tool calling, subscription-included), `AI_API_KEY=sk-nano-...`.
 
 ## 6. Smoke test the pipeline
 
@@ -127,11 +145,12 @@ cd app
 MAPS_API_KEY=<android-maps-key> flutter run \
   --dart-define=SUPABASE_URL=https://<ref>.supabase.co \
   --dart-define=SUPABASE_ANON_KEY=<anon-key> \
-  --dart-define=GOOGLE_PLACES_KEY=<places-key>
+  --dart-define=GOOGLE_PLACES_KEY=<places-key> \
+  --dart-define=GOOGLE_MAPS_WEB_KEY=<web-maps-key>
 ```
 
-Web trial needs the Maps key in `web/index.html` (replace
-`YOUR_WEB_MAPS_API_KEY`); iOS needs it in `ios/Runner/Info.plist` (`GMSApiKey`).
+`GOOGLE_MAPS_WEB_KEY` is injected at startup on web builds (needs "Maps
+JavaScript API" enabled); iOS needs `GMSApiKey` in `ios/Runner/Info.plist`.
 Native desktop targets have no Google Maps runtime — use Chrome for trials.
 
 No backend? Demo parachute: `flutter run -d chrome --dart-define=USE_FAKE=true`
