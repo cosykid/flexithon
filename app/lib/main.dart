@@ -91,14 +91,14 @@ class AccessMapApp extends StatelessWidget {
   }
 }
 
-class HomeShell extends StatefulWidget {
+class HomeShell extends ConsumerStatefulWidget {
   const HomeShell({super.key});
 
   @override
-  State<HomeShell> createState() => _HomeShellState();
+  ConsumerState<HomeShell> createState() => _HomeShellState();
 }
 
-class _HomeShellState extends State<HomeShell> {
+class _HomeShellState extends ConsumerState<HomeShell> {
   int _index = 0;
 
   /// "Report" is a nav action, not a tab — it pushes the flow full-screen
@@ -118,6 +118,10 @@ class _HomeShellState extends State<HomeShell> {
 
   @override
   Widget build(BuildContext context) {
+    final pendingCount = ref.watch(pendingReportsCountProvider);
+    final verifiedCount = ref.watch(verifiedReportsCountProvider);
+    ref.watch(pendingReportsPollProvider);
+
     return Scaffold(
       body: IndexedStack(
         index: _index,
@@ -139,23 +143,108 @@ class _HomeShellState extends State<HomeShell> {
             }
             setState(() => _index = i == 0 ? 0 : 1);
           },
-          destinations: const [
-            NavigationDestination(
+          destinations: [
+            const NavigationDestination(
               icon: Icon(Icons.map_outlined),
               selectedIcon: Icon(Icons.map_rounded),
               label: 'Map',
             ),
-            NavigationDestination(
+            const NavigationDestination(
               icon: Icon(Icons.add_circle_outline_rounded),
               selectedIcon: Icon(Icons.add_circle_rounded),
               label: 'Report',
             ),
             NavigationDestination(
-              icon: Icon(Icons.fact_check_outlined),
-              selectedIcon: Icon(Icons.fact_check_rounded),
+              icon: _NavIconBadge(
+                pendingCount: pendingCount,
+                verifiedCount: verifiedCount,
+                icon: const Icon(Icons.fact_check_outlined),
+              ),
+              selectedIcon: _NavIconBadge(
+                pendingCount: pendingCount,
+                verifiedCount: verifiedCount,
+                icon: const Icon(Icons.fact_check_rounded),
+              ),
               label: 'My reports',
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _NavIconBadge extends StatelessWidget {
+  const _NavIconBadge({
+    required this.icon,
+    required this.pendingCount,
+    required this.verifiedCount,
+  });
+
+  final Widget icon;
+  final int pendingCount;
+  final int verifiedCount;
+
+  bool get _showRed => pendingCount > 0;
+  bool get _showGreen => verifiedCount > 0;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        icon,
+        if (_showGreen)
+          Positioned(
+            top: -2,
+            right: -4,
+            child: _CountBadge(
+              count: verifiedCount,
+              color: KerbColors.success,
+            ),
+          ),
+        if (_showRed)
+          Positioned(
+            top: -2,
+            left: _showGreen ? -4 : null,
+            right: _showGreen ? null : -4,
+            child: _CountBadge(
+              count: pendingCount,
+              color: KerbColors.danger,
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _CountBadge extends StatelessWidget {
+  const _CountBadge({
+    required this.count,
+    required this.color,
+  });
+
+  final int count;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: Colors.white, width: 1.5),
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        count > 9 ? '9+' : '$count',
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+          height: 1.0,
         ),
       ),
     );

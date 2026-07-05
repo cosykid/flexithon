@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
@@ -80,4 +82,30 @@ final locationReportsProvider =
 
 final myReportsProvider = FutureProvider<List<Report>>((ref) {
   return ref.watch(repositoryProvider).fetchMyReports();
+});
+
+/// Count of the user's reports still in AI verification (`pending`).
+final pendingReportsCountProvider = Provider<int>((ref) {
+  final reports = ref.watch(myReportsProvider).valueOrNull;
+  if (reports == null) return 0;
+  return reports.where((r) => r.status == ReportStatus.pending).length;
+});
+
+/// Count of the user's reports that finished verification successfully.
+final verifiedReportsCountProvider = Provider<int>((ref) {
+  final reports = ref.watch(myReportsProvider).valueOrNull;
+  if (reports == null) return 0;
+  return reports.where((r) => r.status == ReportStatus.classified).length;
+});
+
+/// While any report is pending, refresh My Reports every few seconds so the
+/// nav badge clears when verification finishes.
+final pendingReportsPollProvider = Provider<void>((ref) {
+  final pending = ref.watch(pendingReportsCountProvider);
+  if (pending == 0) return;
+
+  final timer = Timer.periodic(const Duration(seconds: 3), (_) {
+    ref.invalidate(myReportsProvider);
+  });
+  ref.onDispose(timer.cancel);
 });

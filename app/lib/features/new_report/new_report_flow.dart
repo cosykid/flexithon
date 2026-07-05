@@ -10,6 +10,7 @@ import '../../core/theme.dart';
 import '../../models/venue.dart';
 import '../map/map_providers.dart';
 import '../map/marker_icons.dart';
+import '../map/verification_watcher.dart';
 import 'new_report_controller.dart';
 import 'venue_search_page.dart';
 
@@ -122,6 +123,7 @@ class _NewReportFlowState extends ConsumerState<NewReportFlow> {
                           // classified) on the map without a manual refresh.
                           ref.invalidate(myReportsProvider);
                           ref.invalidate(mapPointsRawProvider);
+                          ref.read(verificationWatcherProvider).watch(reportId);
                           if (context.mounted) Navigator.of(context).pop(true);
                         }
                       },

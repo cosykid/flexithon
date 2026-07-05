@@ -35,6 +35,7 @@ abstract final class KerbColors {
   // Status
   static const pending = Color(0xFF5F6368);
   static const pendingFill = Color(0xFFF1F3F4);
+  static const success = Color(0xFF188038); // verified / passed
 
   static const frame = Color(0xFF202124); // desktop phone-frame backdrop
 }
