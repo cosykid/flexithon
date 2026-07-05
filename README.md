@@ -90,7 +90,7 @@ RLS mirrors the parent report's visibility (own reports, or classified partial/s
 - **Supabase** — Postgres + PostGIS, anonymous auth, Storage (photos), Edge Function (Deno) for verification
 - **AI** — any OpenAI-compatible `/chat/completions` endpoint with vision + tool calling
 - **Tools the AI can call** — Tavily web search, Google Places (New) `accessibilityOptions.wheelchairAccessibleEntrance`
-- **Maps** — Google Maps Platform: Maps SDK (Android/iOS/JS) with a Kerb-styled basemap, Places API for venue tagging
+- **Maps** — Google Maps Platform: Maps SDK (Android/iOS/JS) with a Kerb-styled basemap, Places API for venue tagging and inline map location search
 
 ## Setup
 
@@ -140,9 +140,9 @@ flexithon/
 │     │  ├─ reports_repository.dart          abstract interface + ReportDraft
 │     │  ├─ supabase_reports_repository.dart real backend (RPCs, storage, edge fn)
 │     │  ├─ fake_reports_repository.dart     in-memory demo backend
-│     │  └─ places_api.dart                  Google Places (New) Text Search
+│     │  └─ places_api.dart                  Google Places (New) Text Search (report tagging + map search)
 │     └─ features/
-│        ├─ map/                map_providers.dart, map_screen.dart, tier_filter_chips.dart
+│        ├─ map/                map_providers.dart, map_screen.dart, map_search_bar.dart, tier_filter_chips.dart
 │        ├─ new_report/         new_report_controller.dart, new_report_flow.dart, venue_search_page.dart
 │        ├─ report_detail/      report_detail_sheet.dart
 │        └─ my_reports/         my_reports_screen.dart
@@ -172,7 +172,7 @@ The app is mobile-first and portrait-first, built around a two-tab shell (**Map*
 
 ### Screens
 
-- **Map** — `flutter_map` with a Stadia/CARTO basemap, viewport-debounced fetching, tier-coloured clustered pins, a my-location button, a *Report barrier* FAB, and tier filter chips for the two visible tiers. Tapping a pin opens the report-detail sheet.
+- **Map** — Google Maps with a Kerb-styled basemap, viewport-debounced fetching, tier-coloured clustered pins, a my-location button, a *Report barrier* FAB, and tier filter chips for the two visible tiers. A **location search** control sits top-left: tap the round search button to expand an inline pill search bar; debounced Google Places Text Search (biased to the map centre, 30 km radius) shows results in a dropdown — tap one to fly the map there (zoom 16). Requires `GOOGLE_PLACES_KEY`. Tapping a pin opens the report-detail sheet.
 - **New report** — the four-step flow (photo, location mini-map you can tap to fine-tune, optional venue search, description) with a sticky submit bar. On success it invalidates the map and My Reports providers so both refresh.
 - **Report detail** — a draggable bottom sheet showing a location's **classified** reports: tier badge, report count, per-report photo (via 1-hour signed URLs), a barrier-type tag, date, description, and an expandable AI-verification summary with tappable **source links** — each verified claim cites the page or Google Maps listing where the information was found. Partially-substantiated locations get a "venue claims accessible online, but photos say otherwise" callout.
 - **My reports** — your own submissions (any status) with pull-to-refresh; status-driven cards — pending shows *Verifying…* with an hourglass, rejected shows a block icon, classified adopts the tier's colour/icon/label.
@@ -227,6 +227,8 @@ flutter run --dart-define=USE_FAKE=true
 ## Demo script
 
 1. Open the map — Sydney seeded with ~30 locations; clusters split as you zoom.
+   Tap the top-left search button to find an address, suburb, or venue; selecting a
+   result flies the map there.
 2. Tap a pin — detail sheet with photo, tier badge, AI reasoning; amber pins show
    the "venue claims accessible, photos say otherwise" callout.
 3. Submit a live report (photo of stairs) — watch it flip from *Verifying…* to a tier.

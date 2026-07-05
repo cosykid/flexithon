@@ -10,10 +10,12 @@ import '../../core/platform.dart';
 import '../../core/theme.dart';
 import '../../core/ui.dart';
 import '../../models/map_point.dart';
+import '../../models/venue.dart';
 import '../report_detail/report_detail_sheet.dart';
 import 'barriers_list_sheet.dart';
 import 'cluster.dart';
 import 'map_providers.dart';
+import 'map_search_bar.dart';
 import 'marker_icons.dart';
 import 'tier_filter_chips.dart';
 
@@ -34,6 +36,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   KerbMarkerIcons? _icons;
   Timer? _debounce;
   double _zoom = _sydney.zoom;
+  LatLng _mapCenter = _sydney.target;
   Set<Marker> _markers = const {};
   int _markerBuild = 0;
   bool _myLocationEnabled = false;
@@ -107,6 +110,12 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     setState(() => _markers = markers);
   }
 
+  Future<void> _flyToPlace(Venue place) async {
+    await _controller?.animateCamera(
+      CameraUpdate.newLatLngZoom(place.position, 16),
+    );
+  }
+
   Future<void> _goToMyLocation() async {
     try {
       var permission = await Geolocator.checkPermission();
@@ -152,7 +161,10 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                 _controller = controller;
                 _scheduleViewportFetch();
               },
-              onCameraMove: (position) => _zoom = position.zoom,
+              onCameraMove: (position) {
+                _zoom = position.zoom;
+                _mapCenter = position.target;
+              },
               onCameraIdle: () {
                 _scheduleViewportFetch();
                 _rebuildMarkers();
@@ -165,9 +177,6 @@ class _MapScreenState extends ConsumerState<MapScreen> {
               caption: 'Google Maps has no desktop runtime — '
                   'run the trial in Chrome (flutter run -d chrome).',
             ),
-          // Top chrome: one slim row — barrier-list chip left, status +
-          // layers/filter dropdown right. No branding; the map owns the
-          // screen, Google Maps style.
           Positioned(
             top: 0,
             left: 0,
@@ -176,27 +185,29 @@ class _MapScreenState extends ConsumerState<MapScreen> {
               bottom: false,
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Align(
-                        alignment: Alignment.centerLeft,
-                        child: _InViewPill(
-                          points: points.valueOrNull ?? const [],
-                          onTap: () => showBarriersListSheet(
-                            context,
-                            points.valueOrNull ?? const [],
-                          ),
-                        ),
+                child: MapLocationSearch(
+                  near: _mapCenter,
+                  onPlaceSelected: _flyToPlace,
+                  inViewSlot: Align(
+                    alignment: Alignment.centerLeft,
+                    child: _InViewPill(
+                      points: points.valueOrNull ?? const [],
+                      onTap: () => showBarriersListSheet(
+                        context,
+                        points.valueOrNull ?? const [],
                       ),
                     ),
-                    if (ref.watch(useFakeProvider)) ...[
-                      const SizedBox(width: 8),
-                      const _DemoDataChip(),
+                  ),
+                  rowTrailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (ref.watch(useFakeProvider)) ...[
+                        const _DemoDataChip(),
+                        const SizedBox(width: 8),
+                      ],
+                      const TierFilterButton(),
                     ],
-                    const SizedBox(width: 8),
-                    const TierFilterButton(),
-                  ],
+                  ),
                 ),
               ),
             ),

@@ -9,7 +9,13 @@ import '../models/venue.dart';
 /// Google Places (New) Text Search, used to tag a report to a venue.
 /// Biased to the user's GPS position so "cafe" finds the one they're at.
 class PlacesApi {
-  Future<List<Venue>> textSearch(String query, {required LatLng near}) async {
+  /// [radiusMeters] biases results toward [near]. Venue tagging uses a tight
+  /// radius; map search uses a wider one so users can jump across the city.
+  Future<List<Venue>> textSearch(
+    String query, {
+    required LatLng near,
+    double radiusMeters = 500,
+  }) async {
     if (Env.googlePlacesKey.isEmpty || query.trim().isEmpty) return [];
     final res = await http.post(
       Uri.parse('https://places.googleapis.com/v1/places:searchText'),
@@ -25,7 +31,7 @@ class PlacesApi {
         'locationBias': {
           'circle': {
             'center': {'latitude': near.latitude, 'longitude': near.longitude},
-            'radius': 500.0,
+            'radius': radiusMeters,
           },
         },
       }),
