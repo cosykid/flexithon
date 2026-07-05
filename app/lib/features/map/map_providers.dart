@@ -81,6 +81,14 @@ final locationReportsProvider =
   return ref.watch(repositoryProvider).fetchLocationReports(locationId);
 });
 
+/// Signed display URL for a report photo, cached per storage path so card
+/// rebuilds don't re-issue the signing round-trip. autoDispose keeps the
+/// (time-limited) URLs from outliving the sheet that needed them.
+final photoUrlProvider =
+    FutureProvider.autoDispose.family<String?, String>((ref, photoPath) {
+  return ref.watch(repositoryProvider).photoUrl(photoPath);
+});
+
 final myReportsProvider = FutureProvider<List<Report>>((ref) {
   return ref.watch(repositoryProvider).fetchMyReports();
 });

@@ -144,7 +144,6 @@ class _ReportCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final repo = ref.watch(repositoryProvider);
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
       decoration: BoxDecoration(
@@ -157,21 +156,22 @@ class _ReportCard extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (report.photoPath != null)
-            FutureBuilder<String?>(
-              future: repo.photoUrl(report.photoPath),
-              builder: (context, snap) {
-                if (snap.data == null) return const SizedBox.shrink();
-                return CachedNetworkImage(
-                  imageUrl: snap.data!,
-                  // Signed URLs differ on every fetch; key the cache by the
-                  // stable storage path or nothing ever hits the disk cache.
-                  cacheKey: report.photoPath,
-                  height: 190,
-                  width: double.infinity,
-                  fit: BoxFit.cover,
-                );
-              },
-            ),
+            Builder(builder: (context) {
+              // Provider-cached: rebuilds reuse the same signed URL instead
+              // of a fresh signing round-trip per frame.
+              final url =
+                  ref.watch(photoUrlProvider(report.photoPath!)).valueOrNull;
+              if (url == null) return const SizedBox.shrink();
+              return CachedNetworkImage(
+                imageUrl: url,
+                // Signed URLs differ on every fetch; key the cache by the
+                // stable storage path or nothing ever hits the disk cache.
+                cacheKey: report.photoPath,
+                height: 190,
+                width: double.infinity,
+                fit: BoxFit.cover,
+              );
+            }),
           Padding(
             padding: const EdgeInsets.all(14),
             child: Column(

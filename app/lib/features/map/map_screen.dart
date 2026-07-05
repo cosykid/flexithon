@@ -156,8 +156,12 @@ class _MapScreenState extends ConsumerState<MapScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final points = ref.watch(mapPointsProvider);
-    ref.listen(mapPointsProvider, (_, __) => _rebuildMarkers());
+    // Markers repaint only when the point data actually changes; the
+    // carry-forward loading state reuses the previous list instance, so
+    // loading flips are skipped instead of re-clustering for nothing.
+    ref.listen(mapPointsProvider, (prev, next) {
+      if (!identical(prev?.valueOrNull, next.valueOrNull)) _rebuildMarkers();
+    });
 
     return Scaffold(
       backgroundColor: KerbColors.paper,
@@ -204,14 +208,20 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                 child: MapLocationSearch(
                   near: _mapCenter,
                   onPlaceSelected: _flyToPlace,
+                  // Scoped Consumer: point updates repaint just this pill,
+                  // not the whole Stack (which would take GoogleMap with it).
                   inViewSlot: Align(
                     alignment: Alignment.centerLeft,
-                    child: _InViewPill(
-                      points: points.valueOrNull ?? const [],
-                      onTap: () => showBarriersListSheet(
-                        context,
-                        points.valueOrNull ?? const [],
-                      ),
+                    child: Consumer(
+                      builder: (context, ref, _) {
+                        final points = ref.watch(mapPointsProvider).valueOrNull ??
+                            const <MapPoint>[];
+                        return _InViewPill(
+                          points: points,
+                          onTap: () =>
+                              showBarriersListSheet(context, points),
+                        );
+                      },
                     ),
                   ),
                   rowTrailing: Row(
