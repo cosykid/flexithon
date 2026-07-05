@@ -29,13 +29,26 @@ class MapLocationSearch extends StatefulWidget {
   State<MapLocationSearch> createState() => _MapLocationSearchState();
 }
 
-class _MapLocationSearchState extends State<MapLocationSearch> {
+class _MapLocationSearchState extends State<MapLocationSearch>
+    with SingleTickerProviderStateMixin {
   static const _searchRadiusMeters = 30000.0;
+  static const _buttonSize = 48.0;
 
   final _api = PlacesApi();
   final _controller = TextEditingController();
   final _focusNode = FocusNode();
   Timer? _debounce;
+
+  late final AnimationController _anim = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 280),
+    reverseDuration: const Duration(milliseconds: 220),
+  );
+  late final Animation<double> _curve = CurvedAnimation(
+    parent: _anim,
+    curve: Curves.easeOutCubic,
+    reverseCurve: Curves.easeInCubic,
+  );
 
   bool _open = false;
   bool _loading = false;
@@ -45,6 +58,7 @@ class _MapLocationSearchState extends State<MapLocationSearch> {
   @override
   void dispose() {
     _debounce?.cancel();
+    _anim.dispose();
     _controller.dispose();
     _focusNode.dispose();
     super.dispose();
@@ -54,10 +68,12 @@ class _MapLocationSearchState extends State<MapLocationSearch> {
     if (_open == open) return;
     setState(() => _open = open);
     if (open) {
+      _anim.forward();
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _focusNode.requestFocus();
       });
     } else {
+      _anim.reverse();
       _focusNode.unfocus();
       _controller.clear();
       _results = [];
@@ -104,36 +120,98 @@ class _MapLocationSearchState extends State<MapLocationSearch> {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Row(
+    return AnimatedBuilder(
+      animation: _curve,
+      builder: (context, _) {
+        final t = _curve.value.clamp(0.0, 1.0);
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            if (_open)
-              Expanded(child: _buildSearchField())
-            else
-              _SearchIconButton(onTap: () => _setOpen(true)),
-            if (!_open && widget.inViewSlot != null) ...[
-              const SizedBox(width: 8),
-              Expanded(child: widget.inViewSlot!),
-            ],
-            const SizedBox(width: 8),
-            widget.rowTrailing,
+            Row(
+              children: [
+                Expanded(child: _buildTopLeft(t)),
+                const SizedBox(width: 8),
+                widget.rowTrailing,
+              ],
+            ),
+            // Results slide down + fade in as the bar opens; collapse on close.
+            ClipRect(
+              child: Align(
+                alignment: Alignment.topCenter,
+                heightFactor: t,
+                child: Opacity(
+                  opacity: t,
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: _buildResultsPanel(),
+                  ),
+                ),
+              ),
+            ),
           ],
-        ),
-        if (_open) ...[
-          const SizedBox(height: 8),
-          _buildResultsPanel(),
+        );
+      },
+    );
+  }
+
+  /// Cross-fades the round button into the search pill, which grows out from
+  /// the button's footprint so the open/close reads as one smooth slide.
+  Widget _buildTopLeft(double t) {
+    return SizedBox(
+      height: _buttonSize,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final full = constraints.maxWidth;
+          final width = _buttonSize + (full - _buttonSize) * t;
+          final buttonOpacity = (1 - t / 0.4).clamp(0.0, 1.0);
+          final fieldOpacity = ((t - 0.3) / 0.7).clamp(0.0, 1.0);
+          return Stack(
+            children: [
+              // Collapsed layer: search button + in-view pill, fades out first.
+              Positioned.fill(
+                child: IgnorePointer(
+                  ignoring: _open,
+                  child: Opacity(
+                    opacity: buttonOpacity,
+                    child: _buildClosedRow(),
+                  ),
+                ),
+              ),
+              // Expanded layer: the pill grows left→right; content is laid out
+              // at full width and clipped, so no overflow mid-animation.
+              if (t > 0)
+                IgnorePointer(
+                  ignoring: !_open,
+                  child: Opacity(
+                    opacity: fieldOpacity,
+                    child: _buildSearchField(width, full),
+                  ),
+                ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildClosedRow() {
+    return Row(
+      children: [
+        _SearchIconButton(onTap: () => _setOpen(true)),
+        if (widget.inViewSlot != null) ...[
+          const SizedBox(width: 8),
+          Expanded(child: widget.inViewSlot!),
         ],
       ],
     );
   }
 
-  Widget _buildSearchField() {
+  Widget _buildSearchField(double width, double contentWidth) {
     const pillRadius = BorderRadius.all(Radius.circular(999));
 
     return Container(
+      width: width,
       height: 48,
       decoration: BoxDecoration(
         color: Colors.white,
@@ -148,8 +226,13 @@ class _MapLocationSearchState extends State<MapLocationSearch> {
         ],
       ),
       clipBehavior: Clip.antiAlias,
-      padding: const EdgeInsets.symmetric(horizontal: 8),
-      child: Row(
+      child: OverflowBox(
+        alignment: Alignment.centerLeft,
+        minWidth: contentWidth,
+        maxWidth: contentWidth,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           const Icon(Icons.search_rounded, size: 20, color: KerbColors.ink300),
@@ -214,6 +297,8 @@ class _MapLocationSearchState extends State<MapLocationSearch> {
             constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
           ),
         ],
+          ),
+        ),
       ),
     );
   }
