@@ -185,6 +185,18 @@ function chatCompletion(messages: unknown[], signal: AbortSignal): Promise<Respo
   });
 }
 
+// Some models (e.g. Qwen) emit Python-style "True"/"False" strings in tool
+// arguments; treat them as their boolean equivalents.
+function asBool(v: unknown): boolean | null {
+  if (typeof v === "boolean") return v;
+  if (typeof v === "string") {
+    const s = v.trim().toLowerCase();
+    if (s === "true") return true;
+    if (s === "false") return false;
+  }
+  return null;
+}
+
 function normalizeVerdict(
   args: Record<string, unknown>,
   input: RunInput,
@@ -193,17 +205,11 @@ function normalizeVerdict(
 ): Verdict {
   const noImage = !input.imageDataUri || visionFailed;
   return {
-    image_confirms_barrier: noImage
-      ? null
-      : typeof args.image_confirms_barrier === "boolean"
-      ? args.image_confirms_barrier
-      : null,
+    image_confirms_barrier: noImage ? null : asBool(args.image_confirms_barrier),
     barrier_type: typeof args.barrier_type === "string" ? args.barrier_type : null,
-    venue_claims_accessible: typeof args.venue_claims_accessible === "boolean"
-      ? args.venue_claims_accessible
-      : null,
-    web_corroboration_found: args.web_corroboration_found === true,
-    image_contradicts_report: !noImage && args.image_contradicts_report === true,
+    venue_claims_accessible: asBool(args.venue_claims_accessible),
+    web_corroboration_found: asBool(args.web_corroboration_found) === true,
+    image_contradicts_report: !noImage && asBool(args.image_contradicts_report) === true,
     confidence: (["low", "medium", "high"].includes(String(args.confidence))
       ? args.confidence
       : "low") as Verdict["confidence"],

@@ -24,4 +24,3 @@ node_modules/
 
 # Maps API keys — real values, never commit
 app/ios/Flutter/Secrets.xcconfig
-app/web/maps_config.js
