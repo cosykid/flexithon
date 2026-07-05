@@ -28,8 +28,13 @@ class NewReportState {
     this.error,
   });
 
+  // Photo is mandatory: verification can't substantiate a report without
+  // one, so a photoless submission is a guaranteed dead end.
   bool get canSubmit =>
-      position != null && description.trim().isNotEmpty && !submitting;
+      photoBytes != null &&
+      position != null &&
+      description.trim().isNotEmpty &&
+      !submitting;
 
   NewReportState copyWith({
     Uint8List? photoBytes,
