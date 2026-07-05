@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../models/map_point.dart';
+import '../models/outreach.dart';
 import '../models/report.dart';
 import '../models/venue.dart';
 
@@ -45,4 +46,8 @@ abstract class ReportsRepository {
   /// The destination URL for an AI-verification source link, resolved at
   /// click time (fetched from the report_sources table on the backend).
   Future<String?> sourceUrl(AiSource source);
+
+  /// Server-drafted venue-outreach emails for the given locations
+  /// (only locations that reached the outreach threshold have one).
+  Future<Map<String, LocationOutreach>> fetchOutreach(Set<String> locationIds);
 }

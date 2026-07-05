@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../models/map_point.dart';
+import '../models/outreach.dart';
 import '../models/report.dart';
 import 'reports_repository.dart';
 
@@ -131,4 +132,23 @@ class FakeReportsRepository implements ReportsRepository {
 
   @override
   Future<String?> sourceUrl(AiSource source) async => source.url;
+
+  @override
+  Future<Map<String, LocationOutreach>> fetchOutreach(
+      Set<String> locationIds) async {
+    // Demo: every substantiated demo location has a ready-to-send draft.
+    return {
+      for (final id in locationIds)
+        id: LocationOutreach(
+          locationId: id,
+          status: 'drafted',
+          businessEmail: 'access@demo-venue.example',
+          subject: 'Accessibility barrier reports at your venue',
+          body: 'Hello,\n\nSeveral community members have reported an '
+              'accessibility barrier at your venue (stairs at the entrance '
+              'with no ramp). Could you share your plans for an accessible '
+              'entrance?\n\nKind regards,',
+        ),
+    };
+  }
 }

@@ -8,6 +8,7 @@ import '../../data/fake_reports_repository.dart';
 import '../../data/reports_repository.dart';
 import '../../data/supabase_reports_repository.dart';
 import '../../models/map_point.dart';
+import '../../models/outreach.dart';
 import '../../models/report.dart';
 
 /// True when running on fake in-memory data — either requested via
@@ -82,6 +83,16 @@ final locationReportsProvider =
 
 final myReportsProvider = FutureProvider<List<Report>>((ref) {
   return ref.watch(repositoryProvider).fetchMyReports();
+});
+
+/// Server-drafted venue-outreach emails for the locations the user has
+/// reported at, keyed by location id. Only locations that reached the
+/// outreach threshold (see draft-outreach edge function) have an entry.
+final myOutreachProvider =
+    FutureProvider<Map<String, LocationOutreach>>((ref) async {
+  final reports = await ref.watch(myReportsProvider.future);
+  final locationIds = reports.map((r) => r.locationId).toSet();
+  return ref.watch(repositoryProvider).fetchOutreach(locationIds);
 });
 
 /// Count of the user's reports still in AI verification (`pending`).

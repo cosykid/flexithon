@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/theme.dart';
 import '../../core/ui.dart';
+import '../../models/outreach.dart';
 import '../../models/report.dart';
 import '../map/map_providers.dart';
 import 'report_pipeline.dart';
@@ -14,6 +17,8 @@ class MyReportsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final reports = ref.watch(myReportsProvider);
+    final outreach =
+        ref.watch(myOutreachProvider).valueOrNull ?? const {};
 
     return Scaffold(
       appBar: AppBar(title: const Text('My reports')),
@@ -42,9 +47,11 @@ class MyReportsScreen extends ConsumerWidget {
                   return ReportPipelineSummaryCard(reports: value);
                 }
                 final index = _showPipelineSummary(value) ? i - 1 : i;
+                final report = value[index];
                 return _MyReportCard(
-                  report: value[index],
+                  report: report,
                   totalReportCount: value.length,
+                  outreach: outreach[report.locationId],
                 );
               },
             ),
@@ -74,10 +81,12 @@ class _MyReportCard extends StatefulWidget {
   const _MyReportCard({
     required this.report,
     required this.totalReportCount,
+    this.outreach,
   });
 
   final Report report;
   final int totalReportCount;
+  final LocationOutreach? outreach;
 
   static const _autoExpandThreshold = 5;
 
@@ -205,8 +214,74 @@ class _MyReportCardState extends State<_MyReportCard> {
             const SizedBox(height: 12),
             ReportPipelineIndicator(report: report, compact: true),
           ],
+          if (widget.outreach?.sendable ?? false) ...[
+            const SizedBox(height: 12),
+            _OutreachButton(outreach: widget.outreach!),
+          ] else if (widget.outreach?.copyOnly ?? false) ...[
+            const SizedBox(height: 12),
+            _CopyLetterButton(outreach: widget.outreach!),
+          ],
         ],
       ),
+    );
+  }
+}
+
+/// Opens the user's mail app with the server-drafted advocacy email
+/// pre-filled — the user reviews and hits send themselves.
+class _OutreachButton extends StatelessWidget {
+  const _OutreachButton({required this.outreach});
+
+  final LocationOutreach outreach;
+
+  @override
+  Widget build(BuildContext context) {
+    return FilledButton.icon(
+      style: FilledButton.styleFrom(
+        backgroundColor: KerbColors.brand600,
+        minimumSize: const Size.fromHeight(44),
+      ),
+      icon: const Icon(Icons.mail_outline_rounded, size: 18),
+      label: const Text('Email the venue'),
+      onPressed: () async {
+        final messenger = ScaffoldMessenger.of(context);
+        if (!await launchUrl(outreach.mailtoUri)) {
+          messenger.showSnackBar(
+            const SnackBar(content: Text('No mail app available')),
+          );
+        }
+      },
+    );
+  }
+}
+
+/// Draft exists but no contact address was found — let the user copy the
+/// letter and paste it into a contact form or social channel instead.
+class _CopyLetterButton extends StatelessWidget {
+  const _CopyLetterButton({required this.outreach});
+
+  final LocationOutreach outreach;
+
+  @override
+  Widget build(BuildContext context) {
+    return OutlinedButton.icon(
+      style: OutlinedButton.styleFrom(
+        minimumSize: const Size.fromHeight(44),
+      ),
+      icon: const Icon(Icons.copy_rounded, size: 18),
+      label: const Text('Copy advocacy letter'),
+      onPressed: () async {
+        final messenger = ScaffoldMessenger.of(context);
+        await Clipboard.setData(ClipboardData(
+          text: '${outreach.subject}\n\n${outreach.body}',
+        ));
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text('Letter copied — no public email was found for '
+                'this venue, paste it into their contact form.'),
+          ),
+        );
+      },
     );
   }
 }

@@ -127,6 +127,11 @@ async function processReport(reportId: string): Promise<{ ok: boolean; detail: s
         .eq("id", report.location_id);
     }
 
+    // Enough classified reports here? Kick off venue-outreach drafting.
+    // Fire-and-forget: drafting takes ~a minute and must not block or fail
+    // this classification; draft-outreach re-checks the threshold itself.
+    maybeTriggerOutreach(report.location_id);
+
     return { ok: true, detail: `classified: ${tier ?? status}` };
   } catch (e) {
     // Leave pending; the sweep path retries up to MAX_RETRIES.
@@ -136,6 +141,17 @@ async function processReport(reportId: string): Promise<{ ok: boolean; detail: s
       .eq("id", reportId);
     return { ok: false, detail: `verification failed (retry ${report.retry_count + 1}): ${e}` };
   }
+}
+
+function maybeTriggerOutreach(locationId: string): void {
+  fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/draft-outreach`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+    },
+    body: JSON.stringify({ location_id: locationId }),
+  }).catch((e) => console.error(`draft-outreach trigger failed: ${e}`));
 }
 
 async function loadPhoto(path: string): Promise<string | null> {

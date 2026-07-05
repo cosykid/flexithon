@@ -4,6 +4,7 @@ import 'package:uuid/uuid.dart';
 
 import '../core/supabase.dart';
 import '../models/map_point.dart';
+import '../models/outreach.dart';
 import '../models/report.dart';
 import 'reports_repository.dart';
 
@@ -101,6 +102,20 @@ class SupabaseReportsRepository implements ReportsRepository {
         .eq('id', reportId)
         .maybeSingle();
     return row == null ? null : Report.fromJson(row);
+  }
+
+  @override
+  Future<Map<String, LocationOutreach>> fetchOutreach(
+      Set<String> locationIds) async {
+    if (locationIds.isEmpty) return {};
+    final rows = await supa
+        .from('location_outreach')
+        .select('location_id, status, business_email, subject, body')
+        .inFilter('location_id', locationIds.toList());
+    return {
+      for (final row in rows)
+        row['location_id'] as String: LocationOutreach.fromJson(row),
+    };
   }
 
   @override
