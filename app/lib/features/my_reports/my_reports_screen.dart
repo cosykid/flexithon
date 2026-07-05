@@ -6,6 +6,7 @@ import '../../core/theme.dart';
 import '../../core/ui.dart';
 import '../../models/report.dart';
 import '../map/map_providers.dart';
+import 'report_pipeline.dart';
 
 class MyReportsScreen extends ConsumerWidget {
   const MyReportsScreen({super.key});
@@ -34,9 +35,18 @@ class MyReportsScreen extends ConsumerWidget {
             ),
           AsyncData(:final value) => ListView.separated(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
-              itemCount: value.length,
+              itemCount: _listItemCount(value),
               separatorBuilder: (_, __) => const SizedBox(height: 10),
-              itemBuilder: (context, i) => _MyReportCard(report: value[i]),
+              itemBuilder: (context, i) {
+                if (_showPipelineSummary(value) && i == 0) {
+                  return ReportPipelineSummaryCard(reports: value);
+                }
+                final index = _showPipelineSummary(value) ? i - 1 : i;
+                return _MyReportCard(
+                  report: value[index],
+                  totalReportCount: value.length,
+                );
+              },
             ),
           AsyncError(:final error) => ListView(
               children: [
@@ -53,12 +63,36 @@ class MyReportsScreen extends ConsumerWidget {
       ),
     );
   }
+
+  static bool _showPipelineSummary(List<Report> reports) => reports.isNotEmpty;
+
+  static int _listItemCount(List<Report> reports) =>
+      reports.length + (_showPipelineSummary(reports) ? 1 : 0);
 }
 
-class _MyReportCard extends StatelessWidget {
-  const _MyReportCard({required this.report});
+class _MyReportCard extends StatefulWidget {
+  const _MyReportCard({
+    required this.report,
+    required this.totalReportCount,
+  });
 
   final Report report;
+  final int totalReportCount;
+
+  static const _autoExpandThreshold = 5;
+
+  @override
+  State<_MyReportCard> createState() => _MyReportCardState();
+}
+
+class _MyReportCardState extends State<_MyReportCard> {
+  /// When null, expand/collapse follows [totalReportCount] vs threshold.
+  bool? _userExpanded;
+
+  Report get report => widget.report;
+
+  bool get _isExpanded =>
+      _userExpanded ?? (widget.totalReportCount < _MyReportCard._autoExpandThreshold);
 
   Color get _color => switch (report.status) {
         ReportStatus.pending => KerbColors.pending,
@@ -89,6 +123,18 @@ class _MyReportCard extends StatelessWidget {
       };
 
   @override
+  void didUpdateWidget(_MyReportCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final wasUnderThreshold =
+        oldWidget.totalReportCount < _MyReportCard._autoExpandThreshold;
+    final isUnderThreshold =
+        widget.totalReportCount < _MyReportCard._autoExpandThreshold;
+    if (wasUnderThreshold != isUnderThreshold) {
+      _userExpanded = null;
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(14),
@@ -97,48 +143,68 @@ class _MyReportCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(KerbRadius.md),
         border: Border.all(color: KerbColors.line),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: _fill,
-              borderRadius: BorderRadius.circular(KerbRadius.sm),
-            ),
-            child: Icon(_icon, size: 22, color: _color),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  report.locationName ?? report.description,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontWeight: FontWeight.w600),
+          Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: _fill,
+                  borderRadius: BorderRadius.circular(KerbRadius.sm),
                 ),
-                const SizedBox(height: 3),
-                Row(
+                child: Icon(_icon, size: 22, color: _color),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      _label,
-                      style: TextStyle(
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w700,
-                        color: _color,
-                      ),
+                      report.locationName ?? report.description,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontWeight: FontWeight.w600),
                     ),
-                    Text(
-                      '  ·  ${DateFormat.yMMMd().format(report.createdAt)}',
-                      style: Theme.of(context).textTheme.bodySmall,
+                    const SizedBox(height: 3),
+                    Row(
+                      children: [
+                        Text(
+                          _label,
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w700,
+                            color: _color,
+                          ),
+                        ),
+                        Text(
+                          '  ·  ${DateFormat.yMMMd().format(report.createdAt)}',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ],
                     ),
                   ],
                 ),
-              ],
-            ),
+              ),
+              IconButton(
+                tooltip: _isExpanded ? 'Hide pipeline' : 'Show pipeline',
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                onPressed: () => setState(() => _userExpanded = !_isExpanded),
+                icon: Icon(
+                  _isExpanded ? Icons.expand_less_rounded : Icons.expand_more_rounded,
+                  color: KerbColors.ink600,
+                ),
+              ),
+            ],
           ),
+          if (_isExpanded) ...[
+            const SizedBox(height: 12),
+            ReportPipelineIndicator(report: report, compact: true),
+          ],
         ],
       ),
     );

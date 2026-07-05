@@ -11,6 +11,7 @@ import '../../models/venue.dart';
 import '../map/map_providers.dart';
 import '../map/marker_icons.dart';
 import '../map/verification_watcher.dart';
+import '../my_reports/report_pipeline.dart';
 import 'new_report_controller.dart';
 import 'venue_search_page.dart';
 
@@ -129,13 +130,7 @@ class _NewReportFlowState extends ConsumerState<NewReportFlow> {
                       },
               ),
               const SizedBox(height: 8),
-              Text(
-                'Verified by AI before it appears on the map: your photo is '
-                'checked and the venue\'s public accessibility claims are '
-                'investigated.',
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
+              const ReportSubmitPipelineHint(),
             ],
           ),
         ),
