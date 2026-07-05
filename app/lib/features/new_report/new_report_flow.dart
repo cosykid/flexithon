@@ -118,6 +118,33 @@ class _NewReportFlowState extends ConsumerState<NewReportFlow> {
                 onPressed: !state.canSubmit
                     ? null
                     : () async {
+                        // A photo is what lets verification put the report on
+                        // the map — without one it dead-ends at unverified, so
+                        // make that an explicit choice rather than a surprise.
+                        if (state.photoBytes == null) {
+                          final proceed = await showDialog<bool>(
+                            context: context,
+                            builder: (context) => AlertDialog(
+                              title: const Text('Submit without a photo?'),
+                              content: const Text(
+                                  'Reports without a photo can\'t be verified '
+                                  'and won\'t appear on the map.'),
+                              actions: [
+                                TextButton(
+                                  onPressed: () =>
+                                      Navigator.of(context).pop(false),
+                                  child: const Text('Add a photo'),
+                                ),
+                                FilledButton(
+                                  onPressed: () =>
+                                      Navigator.of(context).pop(true),
+                                  child: const Text('Submit anyway'),
+                                ),
+                              ],
+                            ),
+                          );
+                          if (proceed != true) return;
+                        }
                         final reportId = await controller.submit();
                         if (reportId != null) {
                           // New report should show up in My Reports and (once

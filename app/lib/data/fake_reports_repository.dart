@@ -28,10 +28,60 @@ class FakeReportsRepository implements ReportsRepository {
         reportCount: 1 + rng.nextInt(6),
       ));
     }
+
+    // Seed My Reports so the pipeline UI, tier spectrum and outreach button
+    // all have something to show on a cold demo boot. The substantiated one
+    // sits at an outreach-eligible location (substantiated, 5+ reports).
+    final outreachPoint = _points.firstWhere(
+      (p) => p.tier == ReportTier.substantiated && p.reportCount >= 5,
+      orElse: () => _points.first,
+    );
+    final now = DateTime.now();
+    _mine.addAll([
+      Report(
+        id: 'mine-seed-0',
+        locationId: outreachPoint.locationId,
+        locationName: outreachPoint.name,
+        description: 'Entrance is up a flight of stairs, no ramp anywhere.',
+        barrierType: 'stairs',
+        status: ReportStatus.classified,
+        tier: ReportTier.substantiated,
+        imageConfirmsBarrier: true,
+        aiReasoning: 'Demo mode: photo shows the stepped entrance clearly.',
+        createdAt: now.subtract(const Duration(days: 2)),
+      ),
+      Report(
+        id: 'mine-seed-1',
+        locationId: 'fake-0',
+        locationName: 'Demo location 0',
+        description: 'Door too narrow for my chair, staff had to unload via café.',
+        barrierType: 'narrow_entrance',
+        status: ReportStatus.classified,
+        tier: ReportTier.partiallySubstantiated,
+        imageConfirmsBarrier: true,
+        venueClaimsAccessible: true,
+        aiReasoning:
+            'Demo mode: photo shows the narrow door; venue claims accessibility online.',
+        createdAt: now.subtract(const Duration(days: 5)),
+      ),
+      Report(
+        id: 'mine-seed-2',
+        locationId: 'fake-1',
+        locationName: 'Demo location 1',
+        description: 'Lift out of order again.',
+        status: ReportStatus.classified,
+        tier: ReportTier.unsubstantiated,
+        aiReasoning: 'Demo mode: no photo was provided, claim can\'t be verified.',
+        createdAt: now.subtract(const Duration(days: 8)),
+      ),
+    ]);
+    _outreachLocationId = outreachPoint.locationId;
   }
 
   final List<MapPoint> _points = [];
   final List<Report> _mine = [];
+  final Set<String> _photolessMine = {};
+  late final String _outreachLocationId;
 
   @override
   Future<List<MapPoint>> fetchMapPoints(LatLngBounds bounds) async {
@@ -81,17 +131,23 @@ class FakeReportsRepository implements ReportsRepository {
   }
 
   @override
-  Future<List<Report>> fetchMyReports() async => List.of(_mine);
+  Future<List<Report>> fetchMyReports() async {
+    for (var i = 0; i < _mine.length; i++) {
+      _mine[i] = _matured(_mine[i]);
+    }
+    return List.of(_mine);
+  }
 
   @override
   Future<String> submitReport(ReportDraft draft) async {
     await Future<void>.delayed(const Duration(milliseconds: 400));
     final id = 'mine-${_mine.length}';
+    if (draft.photoBytes == null) _photolessMine.add(id);
     _mine.insert(
       0,
       Report(
         id: id,
-        locationId: 'fake-mine',
+        locationId: 'mine-loc-${_mine.length}',
         locationName: draft.venue?.name,
         description: draft.description,
         status: ReportStatus.pending,
@@ -105,26 +161,31 @@ class FakeReportsRepository implements ReportsRepository {
   Future<Report?> fetchReport(String reportId) async {
     final i = _mine.indexWhere((r) => r.id == reportId);
     if (i < 0) return null;
-    var report = _mine[i];
-    // Simulate the AI pipeline: flips to classified ~6s after submission.
-    if (report.status == ReportStatus.pending &&
-        DateTime.now().difference(report.createdAt).inSeconds >= 6) {
-      report = Report(
-        id: report.id,
-        locationId: report.locationId,
-        locationName: report.locationName,
-        description: report.description,
-        barrierType: 'stairs',
-        status: ReportStatus.classified,
-        tier: ReportTier.substantiated,
-        imageConfirmsBarrier: true,
-        aiReasoning:
-            'Demo mode: simulated verification — photo shows the barrier.',
-        createdAt: report.createdAt,
-      );
-      _mine[i] = report;
+    return _mine[i] = _matured(_mine[i]);
+  }
+
+  /// Simulate the AI pipeline: classifies ~6s after submission, mirroring
+  /// the real rules — no photo dead-ends at unsubstantiated.
+  Report _matured(Report report) {
+    if (report.status != ReportStatus.pending ||
+        DateTime.now().difference(report.createdAt).inSeconds < 6) {
+      return report;
     }
-    return report;
+    final hasPhoto = !_photolessMine.contains(report.id);
+    return Report(
+      id: report.id,
+      locationId: report.locationId,
+      locationName: report.locationName,
+      description: report.description,
+      barrierType: hasPhoto ? 'stairs' : null,
+      status: ReportStatus.classified,
+      tier: hasPhoto ? ReportTier.substantiated : ReportTier.unsubstantiated,
+      imageConfirmsBarrier: hasPhoto ? true : null,
+      aiReasoning: hasPhoto
+          ? 'Demo mode: simulated verification — photo shows the barrier.'
+          : 'Demo mode: no photo was provided, so the claim can\'t be verified.',
+      createdAt: report.createdAt,
+    );
   }
 
   @override
@@ -136,19 +197,20 @@ class FakeReportsRepository implements ReportsRepository {
   @override
   Future<Map<String, LocationOutreach>> fetchOutreach(
       Set<String> locationIds) async {
-    // Demo: every substantiated demo location has a ready-to-send draft.
+    // Mirror the real gating: only the seeded substantiated location with
+    // 5+ reports has a draft — not every location the user touched.
+    if (!locationIds.contains(_outreachLocationId)) return {};
     return {
-      for (final id in locationIds)
-        id: LocationOutreach(
-          locationId: id,
-          status: 'drafted',
-          businessEmail: 'access@demo-venue.example',
-          subject: 'Accessibility barrier reports at your venue',
-          body: 'Hello,\n\nSeveral community members have reported an '
-              'accessibility barrier at your venue (stairs at the entrance '
-              'with no ramp). Could you share your plans for an accessible '
-              'entrance?\n\nKind regards,',
-        ),
+      _outreachLocationId: LocationOutreach(
+        locationId: _outreachLocationId,
+        status: 'drafted',
+        businessEmail: 'access@demo-venue.example',
+        subject: 'Accessibility barrier reports at your venue',
+        body: 'Hello,\n\nSeveral community members have reported an '
+            'accessibility barrier at your venue (stairs at the entrance '
+            'with no ramp). Could you share your plans for an accessible '
+            'entrance?\n\nKind regards,',
+      ),
     };
   }
 }

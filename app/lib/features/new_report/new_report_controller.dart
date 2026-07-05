@@ -100,17 +100,39 @@ class NewReportController extends StateNotifier<NewReportState> {
         state = state.copyWith(error: 'Location permission denied');
         return;
       }
-      final pos = await Geolocator.getCurrentPosition();
+      final pos = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          timeLimit: Duration(seconds: 10),
+        ),
+      );
       state = state.copyWith(
         position: LatLng(pos.latitude, pos.longitude),
         clearError: true,
       );
     } catch (_) {
-      // GPS unavailable (desktop trial, airplane mode). Give the user a pin
-      // they can drag rather than a dead end.
+      // Fix timed out or GPS unavailable — a stale fix still beats the
+      // city-centre default for pinning a barrier.
+      Position? last;
+      try {
+        last = await Geolocator.getLastKnownPosition();
+      } catch (_) {
+        // Not supported on this platform (web).
+      }
+      if (last != null) {
+        state = state.copyWith(
+          position: LatLng(last.latitude, last.longitude),
+          error: 'GPS is slow — using your last known position, '
+              'drag the pin if it looks off.',
+        );
+        return;
+      }
+      // Desktop trial, airplane mode. Give the user a pin they can drag
+      // rather than a dead end — but say so loudly.
       state = state.copyWith(
         position: _fallbackPosition,
-        error: 'Couldn\'t read GPS — pin set to a default, tap the map to adjust.',
+        error: 'Couldn\'t read GPS — pin set to a default location, '
+            'move it to the barrier before submitting.',
       );
     }
   }

@@ -116,17 +116,32 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     );
   }
 
+  void _locationSnack(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  }
+
   Future<void> _goToMyLocation() async {
     try {
       var permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
       }
-      if (permission == LocationPermission.denied ||
-          permission == LocationPermission.deniedForever) {
+      if (permission == LocationPermission.deniedForever) {
+        _locationSnack(
+            'Location permission is blocked — enable it in system settings.');
         return;
       }
-      final pos = await Geolocator.getCurrentPosition();
+      if (permission == LocationPermission.denied) {
+        _locationSnack('Location permission denied.');
+        return;
+      }
+      final pos = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          timeLimit: Duration(seconds: 10),
+        ),
+      );
       if (!mounted) return;
       // Blue dot only after consent, so the first frame never asks.
       setState(() => _myLocationEnabled = true);
@@ -134,7 +149,8 @@ class _MapScreenState extends ConsumerState<MapScreen> {
         CameraUpdate.newLatLngZoom(LatLng(pos.latitude, pos.longitude), 16),
       );
     } catch (_) {
-      // No location plugin on this platform (web/desktop trial) — stay put.
+      // Fix timed out, or no location plugin on this platform (web/desktop).
+      _locationSnack('Couldn\'t get a GPS fix — try again outdoors.');
     }
   }
 
