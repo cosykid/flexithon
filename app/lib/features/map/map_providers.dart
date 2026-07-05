@@ -95,6 +95,43 @@ final myOutreachProvider =
   return ref.watch(repositoryProvider).fetchOutreach(locationIds);
 });
 
+/// Last-known status per report when the user opened My Reports.
+/// Badges only reflect changes after that snapshot.
+final myReportsSeenStatusesProvider =
+    StateProvider<Map<String, ReportStatus>>((ref) => {});
+
+/// Pending reports the user has not seen on My Reports yet.
+final unseenPendingReportsCountProvider = Provider<int>((ref) {
+  final reports = ref.watch(myReportsProvider).valueOrNull;
+  if (reports == null) return 0;
+  final seen = ref.watch(myReportsSeenStatusesProvider);
+  return reports
+      .where((r) =>
+          r.status == ReportStatus.pending &&
+          seen[r.id] != ReportStatus.pending)
+      .length;
+});
+
+/// Newly classified reports since the user last opened My Reports.
+final unseenVerifiedReportsCountProvider = Provider<int>((ref) {
+  final reports = ref.watch(myReportsProvider).valueOrNull;
+  if (reports == null) return 0;
+  final seen = ref.watch(myReportsSeenStatusesProvider);
+  return reports
+      .where((r) =>
+          r.status == ReportStatus.classified &&
+          seen[r.id] != ReportStatus.classified)
+      .length;
+});
+
+void markMyReportsSeen(WidgetRef ref) {
+  final reports = ref.read(myReportsProvider).valueOrNull;
+  if (reports == null) return;
+  ref.read(myReportsSeenStatusesProvider.notifier).state = {
+    for (final r in reports) r.id: r.status,
+  };
+}
+
 /// Count of the user's reports still in AI verification (`pending`).
 final pendingReportsCountProvider = Provider<int>((ref) {
   final reports = ref.watch(myReportsProvider).valueOrNull;

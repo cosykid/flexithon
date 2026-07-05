@@ -31,13 +31,14 @@ void main() {
     expect(ReportPipelineProgress.statesFor(report), everyElement(PipelineStepState.complete));
   });
 
-  test('unsubstantiated report skips on-map stage', () {
+  test('unsubstantiated report fails on-map stage in red', () {
     final report = _report(
       status: ReportStatus.classified,
       tier: ReportTier.unsubstantiated,
     );
     final states = ReportPipelineProgress.statesFor(report);
-    expect(states[3], PipelineStepState.skipped);
+    expect(states[3], PipelineStepState.failed);
+    expect(ReportPipelineProgress.activeIndex(report), 3);
   });
 
   test('rejected report fails at verifying stage', () {
@@ -53,6 +54,6 @@ void main() {
       _report(status: ReportStatus.classified, tier: ReportTier.unsubstantiated),
       _report(status: ReportStatus.rejected),
     ];
-    expect(ReportPipelineProgress.countsByStage(reports), [0, 3, 1, 1]);
+    expect(ReportPipelineProgress.countsByStage(reports), [0, 3, 0, 2]);
   });
 }

@@ -68,7 +68,7 @@ abstract final class ReportPipelineProgress {
               PipelineStepState.complete,
               PipelineStepState.complete,
               PipelineStepState.complete,
-              PipelineStepState.skipped,
+              PipelineStepState.failed,
             ],
         },
     };
@@ -109,6 +109,10 @@ abstract final class ReportPipelineProgress {
     return counts;
   }
 
+  static bool isNotOnMap(Report report) =>
+      report.status == ReportStatus.classified &&
+      report.tier == ReportTier.unsubstantiated;
+
   static PipelineStepState summaryStateForStage(
     int stageIndex,
     int count,
@@ -120,6 +124,13 @@ abstract final class ReportPipelineProgress {
         return PipelineStepState.active;
       }
       if (reports.any((r) => r.status == ReportStatus.rejected)) {
+        return PipelineStepState.failed;
+      }
+    }
+    if (stageIndex == 3 && count > 0) {
+      final atStage =
+          reports.where((r) => activeIndex(r) == stageIndex).toList();
+      if (atStage.isNotEmpty && atStage.every(isNotOnMap)) {
         return PipelineStepState.failed;
       }
     }
@@ -160,7 +171,9 @@ class ReportPipelineIndicator extends StatelessWidget {
                 step: ReportPipelineProgress.steps[i],
                 state: states[i],
                 compact: compact,
-                isCurrent: i == activeIndex && states[i] == PipelineStepState.active,
+                isCurrent: i == activeIndex &&
+                    (states[i] == PipelineStepState.active ||
+                        states[i] == PipelineStepState.failed),
               ),
             ],
           ],
