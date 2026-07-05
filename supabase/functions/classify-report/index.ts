@@ -18,7 +18,18 @@ const supa = createClient(
 const MAX_RETRIES = 3;
 const MAX_PHOTO_BYTES = 4 * 1024 * 1024;
 
+// Browser clients (Flutter web) preflight cross-origin POSTs; without these
+// headers the OPTIONS request 400s and the browser never sends the real call.
+const CORS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+
 Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
+
   let body: { report_id?: string; sweep?: boolean };
   try {
     body = await req.json();
@@ -36,11 +47,27 @@ Deno.serve(async (req) => {
       .lt("created_at", cutoff)
       .limit(10);
     if (error) return json({ error: error.message }, 500);
-    const results = [];
-    for (const r of pending ?? []) {
-      results.push({ id: r.id, ...(await processReport(r.id)) });
+    // Fan out: one self-invocation per report so each verification gets its
+    // own worker. Processing serially here blows the per-request wall-clock
+    // limit once photo reports take 60s+ each.
+    const invocations = (pending ?? []).map((r) =>
+      fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/classify-report`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+        },
+        body: JSON.stringify({ report_id: r.id }),
+      }).catch((e) => console.error(`sweep dispatch failed for ${r.id}: ${e}`))
+    );
+    // Keep the worker alive until the dispatched requests complete without
+    // holding up this response.
+    // deno-lint-ignore no-explicit-any
+    const runtime = (globalThis as any).EdgeRuntime;
+    if (runtime?.waitUntil) {
+      runtime.waitUntil(Promise.allSettled(invocations));
     }
-    return json({ swept: results.length, results });
+    return json({ swept: pending?.length ?? 0, dispatched: true });
   }
 
   if (!body.report_id) return json({ error: "report_id or sweep required" }, 400);
@@ -170,6 +197,6 @@ async function loadPhoto(path: string): Promise<string | null> {
 function json(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...CORS },
   });
 }

@@ -21,7 +21,18 @@ const MIN_REPORTS = 5;
 const REDRAFT_DELTA = 2;
 const MAX_PHOTOS = 4;
 
+// Browser clients (Flutter web) preflight cross-origin POSTs; without these
+// headers the OPTIONS request 400s and the browser never sends the real call.
+const CORS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+
 Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
+
   let body: { location_id?: string };
   try {
     body = await req.json();
@@ -159,6 +170,6 @@ async function publishPhotos(
 function json(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...CORS },
   });
 }
