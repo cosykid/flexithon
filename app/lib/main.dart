@@ -118,8 +118,8 @@ class _HomeShellState extends ConsumerState<HomeShell> {
 
   @override
   Widget build(BuildContext context) {
-    final pendingCount = ref.watch(pendingReportsCountProvider);
-    final verifiedCount = ref.watch(verifiedReportsCountProvider);
+    final pendingCount = ref.watch(unseenPendingReportsCountProvider);
+    final verifiedCount = ref.watch(unseenVerifiedReportsCountProvider);
     ref.watch(pendingReportsPollProvider);
 
     return Scaffold(
@@ -141,7 +141,11 @@ class _HomeShellState extends ConsumerState<HomeShell> {
               _openReportFlow();
               return;
             }
-            setState(() => _index = i == 0 ? 0 : 1);
+            final nextIndex = i == 0 ? 0 : 1;
+            if (nextIndex == 1 && _index != 1) {
+              markMyReportsSeen(ref);
+            }
+            setState(() => _index = nextIndex);
           },
           destinations: [
             const NavigationDestination(
